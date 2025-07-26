@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./App.css";
+import ReactMarkdown from 'react-markdown';
 
 function App() {
   const [messages, setMessages] = useState([]);
@@ -21,11 +22,7 @@ function App() {
       });
 
       const data = await res.json();
-      console.log("data",data)
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: data.response },
-      ]);
+      setMessages((prev) => [...prev, { role: "assistant", content: data.response }]);
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -41,24 +38,34 @@ function App() {
   };
 
   return (
-    <div className="container">
-      <div className="chat-box">
+
+    <div className={`app ${messages.length === 0 ? "center" : "bottom"}`}>
+
+      {messages.length === 0 && (
+        <h1 className="headline">What's on your mind today?</h1>
+      )}
+
+      <div className="chat-history">
         {messages.map((msg, idx) => (
-          <div key={idx} className={`message ${msg.role}`}>
-            <b>{msg.role === "user" ? "You" : "Manish"}:</b> {msg.content}
+          // <div key={idx} className={`message ${msg.role}`}>
+          //    <strong>{msg.role === "user" ? "You" : "Bot"}:</strong> {msg.content}
+          // </div>
+          <div key={idx} className={`message ${msg.role}`} style={{ padding: '20px' }}>
+            <ReactMarkdown>{msg.content}</ReactMarkdown>
           </div>
         ))}
         {loading && <div className="message assistant">Typing...</div>}
       </div>
-      <div className="input-box">
+
+      <div className="chat-input-container">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask something..."
+          placeholder="Ask anything..."
         />
-        <button onClick={handleSend}>Send</button>
+        <button onClick={handleSend}>➤</button>
       </div>
     </div>
   );
