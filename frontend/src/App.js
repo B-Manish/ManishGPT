@@ -1,6 +1,5 @@
 import { useState } from "react";
-import "./App.css";
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown from "react-markdown";
 
 function App() {
   const [messages, setMessages] = useState([]);
@@ -38,34 +37,110 @@ function App() {
   };
 
   return (
-
-    <div className={`app ${messages.length === 0 ? "center" : "bottom"}`}>
-
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100vh",
+        width: "100%",
+        backgroundColor: "#1e1e20",
+        color: "white",
+        fontFamily: "Arial, sans-serif",
+      }}
+    >
       {messages.length === 0 && (
-        <h1 className="headline">What's on your mind today?</h1>
+        <h1 style={{ textAlign: "center", marginTop: "40px", color: "#e3e3e3" }}>
+          What's on your mind today?
+        </h1>
       )}
 
-      <div className="chat-history">
+      <div
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          width: "100%",
+          maxWidth: "650px",
+          margin: "0 auto",
+          paddingBottom: "10px",
+        }}
+      >
         {messages.map((msg, idx) => (
-          // <div key={idx} className={`message ${msg.role}`}>
-          //    <strong>{msg.role === "user" ? "You" : "Bot"}:</strong> {msg.content}
-          // </div>
-          <div key={idx} className={`message ${msg.role}`} style={{ padding: '20px' }}>
+          <div
+            key={idx}
+            style={{
+              marginBottom: "12px",
+              padding: "12px 16px",
+              borderRadius: "12px",
+              backgroundColor: "#343541",
+              color: "white",
+              width: "fit-content",
+              maxWidth: "90%",
+              alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
+              marginLeft: msg.role === "user" ? "auto" : undefined,
+              marginRight: msg.role === "assistant" ? "auto" : undefined,
+            }}
+          >
             <ReactMarkdown>{msg.content}</ReactMarkdown>
           </div>
         ))}
-        {loading && <div className="message assistant">Typing...</div>}
+        {loading && (
+          <div
+            style={{
+              backgroundColor: "#343541",
+              color: "white",
+              borderRadius: "12px",
+              padding: "12px 16px",
+              marginBottom: "12px",
+              width: "fit-content",
+            }}
+          >
+            Typing...
+          </div>
+        )}
       </div>
 
-      <div className="chat-input-container">
+      <div
+        style={{
+          display: "flex",
+          gap: "12px",
+          padding: "16px",
+          backgroundColor: "#40414f",
+          borderRadius: "12px",
+          width: "100%",
+          maxWidth: "650px",
+          margin: "0 auto 20px",
+        }}
+      >
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Ask anything..."
+          style={{
+            flex: 1,
+            backgroundColor: "#40414f",
+            border: "none",
+            color: "white",
+            fontSize: "16px",
+            outline: "none",
+          }}
         />
-        <button onClick={handleSend}>➤</button>
+        <button
+          onClick={handleSend}
+          style={{
+            backgroundColor: "#40414f",
+            border: "none",
+            color: "white",
+            fontSize: "18px",
+            borderRadius: "50%",
+            width: "36px",
+            height: "36px",
+            cursor: "pointer",
+          }}
+        >
+          ➤
+        </button>
       </div>
     </div>
   );

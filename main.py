@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from agno.agent import Agent
 from agno.models.openai import OpenAIChat
+from agno.models.groq import Groq
 from dotenv import load_dotenv
 import os
 
@@ -19,11 +20,13 @@ app.add_middleware(
 )
 
 # Initialize the agent globally
-api_key = os.getenv("OPENAI_API_KEY")
+# api_key = os.getenv("OPENAI_API_KEY")
+api_key = os.getenv("GROQ_API_KEY")
 
 agent = Agent(
     name="Basic Agent",
-    model=OpenAIChat(id="gpt-4o", api_key=api_key),
+    # model=OpenAIChat(id="gpt-4o", api_key=api_key),
+    model=Groq(id="llama-3.3-70b-versatile",api_key=api_key),
     add_history_to_messages=True,
     num_history_responses=5,
     add_datetime_to_instructions=True,
