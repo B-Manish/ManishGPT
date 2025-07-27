@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import EditNoteIcon from '@mui/icons-material/EditNote';
 
 function Sidebar() {
   const [conversations, setConversations] = useState([]);
@@ -22,7 +23,7 @@ function Sidebar() {
   return (
     <div style={{
       width: 250,
-      backgroundColor: "#202123",
+      backgroundColor: "#171717",
       color: "white",
       padding: "10px",
       overflowY: "auto",
@@ -36,7 +37,7 @@ function Sidebar() {
         marginBottom: "20px",
         cursor: "pointer"
       }}>
-        + New Chat
+       <div style={{display:'flex'}}><EditNoteIcon/><div style={{display:'flex',alignItems:'center',marginLeft:'5px'}}>New Chat</div></div>
       </button>
       {conversations.map((c) => (
         <div
