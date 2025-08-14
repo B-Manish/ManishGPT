@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
-function Sidebar() {
+function Sidebar({ isCollapsed, onToggle }) {
   const [conversations, setConversations] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState("");
@@ -100,6 +102,87 @@ function Sidebar() {
     }
   };
 
+  if (isCollapsed) {
+    return (
+      <div style={{
+        width: 60,
+        backgroundColor: "#171717",
+        color: "white",
+        padding: "10px 5px",
+        height: "100vh",
+        position: "fixed",
+        left: 0,
+        top: 0,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        borderRight: "1px solid #40414f",
+        zIndex: 1000,
+        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+        transform: "translateX(0)",
+        animation: "slideInLeft 0.3s ease-out",
+      }}>
+        <button 
+          onClick={onToggle}
+          style={{
+            backgroundColor: "transparent",
+            border: "none",
+            color: "#74c0fc",
+            cursor: "pointer",
+            padding: "8px",
+            borderRadius: "6px",
+            marginBottom: "20px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "all 0.2s ease",
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.backgroundColor = "#40414f";
+            e.target.style.transform = "scale(1.1)";
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.backgroundColor = "transparent";
+            e.target.style.transform = "scale(1)";
+          }}
+          title="Expand sidebar"
+        >
+          <ChevronRightIcon style={{ fontSize: "20px" }} />
+        </button>
+        
+        <button 
+          onClick={startNewChat}
+          style={{
+            backgroundColor: "#343541",
+            border: "none",
+            color: "white",
+            cursor: "pointer",
+            padding: "8px",
+            borderRadius: "6px",
+            marginBottom: "20px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "40px",
+            height: "40px",
+            transition: "all 0.2s ease",
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.backgroundColor = "#40414f";
+            e.target.style.transform = "scale(1.05)";
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.backgroundColor = "#343541";
+            e.target.style.transform = "scale(1)";
+          }}
+          title="New Chat"
+        >
+          <EditNoteIcon style={{ fontSize: "20px" }} />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div style={{
       width: 250,
@@ -114,25 +197,63 @@ function Sidebar() {
       flexDirection: "column",
       borderRight: "1px solid #40414f",
       zIndex: 1000,
+      transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+      transform: "translateX(0)",
+      animation: "slideInLeft 0.3s ease-out",
     }}>
-      <button onClick={startNewChat} style={{
-        width: "100%",
-        padding: "10px",
-        backgroundColor: "#343541",
-        color: "white",
-        border: "none",
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
         marginBottom: "20px",
-        cursor: "pointer",
-        borderRadius: "8px",
-        fontSize: "14px",
-        fontWeight: "500",
-        transition: "background-color 0.2s",
-      }}
-      onMouseEnter={(e) => e.target.style.backgroundColor = "#40414f"}
-      onMouseLeave={(e) => e.target.style.backgroundColor = "#343541"}
-      >
-       <div style={{display:'flex'}}><EditNoteIcon/><div style={{display:'flex',alignItems:'center',marginLeft:'5px'}}>New Chat</div></div>
-      </button>
+      }}>
+        <button onClick={startNewChat} style={{
+          flex: 1,
+          padding: "10px",
+          backgroundColor: "#343541",
+          color: "white",
+          border: "none",
+          marginRight: "10px",
+          cursor: "pointer",
+          borderRadius: "8px",
+          fontSize: "14px",
+          fontWeight: "500",
+          transition: "all 0.2s ease",
+        }}
+        onMouseEnter={(e) => e.target.style.backgroundColor = "#40414f"}
+        onMouseLeave={(e) => e.target.style.backgroundColor = "#343541"}
+        >
+         <div style={{display:'flex'}}><EditNoteIcon/><div style={{display:'flex',alignItems:'center',marginLeft:'5px'}}>New Chat</div></div>
+        </button>
+        
+        <button 
+          onClick={onToggle}
+          style={{
+            backgroundColor: "transparent",
+            border: "none",
+            color: "#74c0fc",
+            cursor: "pointer",
+            padding: "8px",
+            borderRadius: "6px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+            transition: "all 0.2s ease",
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.backgroundColor = "#40414f";
+            e.target.style.transform = "scale(1.1)";
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.backgroundColor = "transparent";
+            e.target.style.transform = "scale(1)";
+          }}
+          title="Collapse sidebar"
+        >
+          <ChevronLeftIcon style={{ fontSize: "20px" }} />
+        </button>
+      </div>
       
       <div style={{
         flex: 1,
@@ -140,7 +261,7 @@ function Sidebar() {
         overflowX: "hidden",
         paddingRight: "5px",
       }}>
-        {conversations.map((c) => (
+        {conversations.map((c, index) => (
           <div
             key={c.id}
             style={{
@@ -152,7 +273,8 @@ function Sidebar() {
               justifyContent: "space-between",
               alignItems: "center",
               borderRadius: "8px",
-              transition: "background-color 0.2s",
+              transition: "all 0.2s ease",
+              animation: `fadeInUp 0.3s ease-out ${index * 0.05}s both`,
             }}
             onClick={() => navigate(`/chat/${c.id}`)}
             onMouseEnter={(e) => e.target.style.backgroundColor = "#40414f"}
@@ -189,7 +311,7 @@ function Sidebar() {
                 </span>
               )}
             </div>
-            <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+            <div style={{ display: "flex", gap: "4px" }}>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -205,7 +327,7 @@ function Sidebar() {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  transition: "background-color 0.2s",
+                  transition: "all 0.2s ease",
                 }}
                 onMouseEnter={(e) => e.target.style.backgroundColor = "#40414f"}
                 onMouseLeave={(e) => e.target.style.backgroundColor = "transparent"}
@@ -225,7 +347,7 @@ function Sidebar() {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  transition: "background-color 0.2s",
+                  transition: "all 0.2s ease",
                 }}
                 onMouseEnter={(e) => e.target.style.backgroundColor = "#40414f"}
                 onMouseLeave={(e) => e.target.style.backgroundColor = "transparent"}

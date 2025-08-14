@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 
-function Chat() {
+function Chat({ isSidebarCollapsed }) {
   const { id } = useParams();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -145,7 +145,7 @@ function Chat() {
             {messages.map((m, i) => (
               <div key={i} style={{
                 marginBottom: "16px",
-                padding: "16px 20px",
+                padding: "4px 12px 10px 12px",
                 borderRadius: "16px",
                 backgroundColor: m.role === "user" ? "#343541" : "#171717",
                 color: "white",
@@ -155,9 +155,10 @@ function Chat() {
                 marginLeft: m.role === "user" ? "auto" : undefined,
                 marginRight: m.role === "assistant" ? "auto" : undefined,
                 boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-                lineHeight: "1.5",
+                // lineHeight: "1.5",
               }}>
                 <ReactMarkdown>{m.content}</ReactMarkdown>
+                
               </div>
             ))}
             {loading && <div style={{ 
@@ -177,7 +178,7 @@ function Chat() {
         <div style={{
           position: "fixed",
           bottom: 0,
-          left: 275, // Account for sidebar width
+          left: isSidebarCollapsed ? 85 : 275, // Account for sidebar width
           right: 0,
           backgroundColor: "#1e1e20",
           padding: "20px",
