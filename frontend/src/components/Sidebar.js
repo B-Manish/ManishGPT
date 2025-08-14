@@ -106,7 +106,14 @@ function Sidebar() {
       backgroundColor: "#171717",
       color: "white",
       padding: "10px",
-      overflowY: "auto",
+      height: "100vh",
+      position: "fixed",
+      left: 0,
+      top: 0,
+      display: "flex",
+      flexDirection: "column",
+      borderRight: "1px solid #40414f",
+      zIndex: 1000,
     }}>
       <button onClick={startNewChat} style={{
         width: "100%",
@@ -115,89 +122,121 @@ function Sidebar() {
         color: "white",
         border: "none",
         marginBottom: "20px",
-        cursor: "pointer"
-      }}>
+        cursor: "pointer",
+        borderRadius: "8px",
+        fontSize: "14px",
+        fontWeight: "500",
+        transition: "background-color 0.2s",
+      }}
+      onMouseEnter={(e) => e.target.style.backgroundColor = "#40414f"}
+      onMouseLeave={(e) => e.target.style.backgroundColor = "#343541"}
+      >
        <div style={{display:'flex'}}><EditNoteIcon/><div style={{display:'flex',alignItems:'center',marginLeft:'5px'}}>New Chat</div></div>
       </button>
-      {conversations.map((c) => (
-        <div
-          key={c.id}
-          style={{
-            padding: "10px",
-            backgroundColor: "#343541",
-            marginBottom: "10px",
-            cursor: "pointer",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-          onClick={() => navigate(`/chat/${c.id}`)}
-        >
-          <div style={{ flex: 1, marginRight: "8px" }}>
-            {editingId === c.id ? (
-              <input
-                type="text"
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onKeyDown={(e) => handleKeyDown(e, c.id)}
-                onBlur={() => saveTitle(c.id)}
-                style={{
-                  width: "100%",
-                  backgroundColor: "#40414f",
-                  border: "1px solid #565869",
-                  color: "white",
-                  padding: "4px 8px",
-                  borderRadius: "4px",
-                  fontSize: "14px",
-                  outline: "none",
+      
+      <div style={{
+        flex: 1,
+        overflowY: "auto",
+        overflowX: "hidden",
+        paddingRight: "5px",
+      }}>
+        {conversations.map((c) => (
+          <div
+            key={c.id}
+            style={{
+              padding: "10px",
+              backgroundColor: "#343541",
+              marginBottom: "8px",
+              cursor: "pointer",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              borderRadius: "8px",
+              transition: "background-color 0.2s",
+            }}
+            onClick={() => navigate(`/chat/${c.id}`)}
+            onMouseEnter={(e) => e.target.style.backgroundColor = "#40414f"}
+            onMouseLeave={(e) => e.target.style.backgroundColor = "#343541"}
+          >
+            <div style={{ flex: 1, marginRight: "8px", minWidth: 0 }}>
+              {editingId === c.id ? (
+                <input
+                  type="text"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(e, c.id)}
+                  onBlur={() => saveTitle(c.id)}
+                  style={{
+                    width: "100%",
+                    backgroundColor: "#40414f",
+                    border: "1px solid #565869",
+                    color: "white",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    outline: "none",
+                  }}
+                  autoFocus
+                />
+              ) : (
+                <span style={{
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  display: "block",
+                }}>
+                  {c.title || `Chat ${c.id}`}
+                </span>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startEditing(c);
                 }}
-                autoFocus
-              />
-            ) : (
-              <span>{c.title || `Chat ${c.id}`}</span>
-            )}
+                style={{
+                  backgroundColor: "transparent",
+                  border: "none",
+                  color: "#74c0fc",
+                  cursor: "pointer",
+                  padding: "4px",
+                  borderRadius: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  transition: "background-color 0.2s",
+                }}
+                onMouseEnter={(e) => e.target.style.backgroundColor = "#40414f"}
+                onMouseLeave={(e) => e.target.style.backgroundColor = "transparent"}
+                title="Rename conversation"
+              >
+                <EditIcon style={{ fontSize: "16px" }} />
+              </button>
+              <button
+                onClick={(e) => deleteConversation(e, c.id)}
+                style={{
+                  backgroundColor: "transparent",
+                  border: "none",
+                  color: "#ff6b6b",
+                  cursor: "pointer",
+                  padding: "4px",
+                  borderRadius: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  transition: "background-color 0.2s",
+                }}
+                onMouseEnter={(e) => e.target.style.backgroundColor = "#40414f"}
+                onMouseLeave={(e) => e.target.style.backgroundColor = "transparent"}
+                title="Delete conversation"
+              >
+                <DeleteIcon style={{ fontSize: "16px" }} />
+              </button>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: "4px" }}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                startEditing(c);
-              }}
-              style={{
-                backgroundColor: "transparent",
-                border: "none",
-                color: "#74c0fc",
-                cursor: "pointer",
-                padding: "4px",
-                borderRadius: "4px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              title="Rename conversation"
-            >
-              <EditIcon style={{ fontSize: "16px" }} />
-            </button>
-            <button
-              onClick={(e) => deleteConversation(e, c.id)}
-              style={{
-                backgroundColor: "transparent",
-                border: "none",
-                color: "#ff6b6b",
-                cursor: "pointer",
-                padding: "4px",
-                borderRadius: "4px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              title="Delete conversation"
-            >
-              <DeleteIcon style={{ fontSize: "16px" }} />
-            </button>
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }

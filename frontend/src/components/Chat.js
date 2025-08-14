@@ -57,8 +57,7 @@ function Chat() {
 
   return (
     messages.length === 0 ? <div style={{
-
-      backgroundColor: '#212121',
+      backgroundColor: '#1e1e20',
       color: "white",
       display: "flex",
       flexDirection: "column",
@@ -110,31 +109,38 @@ function Chat() {
     </div> :
       <div style={{
         flex: 1,
-        backgroundColor: '#212121',
+        backgroundColor: '#1e1e20',
         color: "white",
         display: "flex",
         flexDirection: "column",
         alignItems: 'center'
       }}>
-        <div style={{ width: '900px', border: '1px solid red' }}>
-
-          <div style={{ flex: 1, padding: 20, overflowY: "None" }}>
+        <div style={{ width: '900px' }}>
+          <div style={{ flex: 1, padding: 20, overflowY: "auto" }}>
             {messages.map((m, i) => (
               <div key={i} style={{
                 marginBottom: "12px",
-                padding: "4px 16px",
+                padding: "12px 16px",
                 borderRadius: "12px",
-                backgroundColor: "#171717",
+                backgroundColor: m.role === "user" ? "#343541" : "#171717",
+                color: "white",
                 width: "fit-content",
                 maxWidth: "80%",
                 alignSelf: m.role === "user" ? "flex-end" : "flex-start",
                 marginLeft: m.role === "user" ? "auto" : undefined,
                 marginRight: m.role === "assistant" ? "auto" : undefined,
+                boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
               }}>
                 <ReactMarkdown>{m.content}</ReactMarkdown>
               </div>
             ))}
-            {loading && <div style={{ padding: 10 }}>Typing...</div>}
+            {loading && <div style={{ 
+              padding: "12px 16px", 
+              backgroundColor: "#171717",
+              borderRadius: "12px",
+              color: "#a0a0a0",
+              fontStyle: "italic"
+            }}>Typing...</div>}
           </div>
 
           <div style={{
@@ -143,6 +149,7 @@ function Chat() {
             backgroundColor: "#40414f",
             borderRadius: "12px",
             margin: "10px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
           }}>
             <input
               type="text"
@@ -170,7 +177,10 @@ function Chat() {
                 width: "36px",
                 height: "36px",
                 cursor: "pointer",
+                transition: "background-color 0.2s",
               }}
+              onMouseEnter={(e) => e.target.style.backgroundColor = "#565869"}
+              onMouseLeave={(e) => e.target.style.backgroundColor = "#40414f"}
             >
               ➤
             </button>

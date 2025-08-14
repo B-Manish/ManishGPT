@@ -162,12 +162,31 @@ import Chat from "./components/Chat";
 function App() {
   return (
     <Router>
-      <div style={{ display: "flex", height: "100vh" }}>
+      <div style={{ 
+        display: "flex", 
+        height: "100vh",
+        backgroundColor: "#1e1e20"
+      }}>
         <Sidebar />
-        <Routes>
-          <Route path="/chat/:id" element={<Chat />} />
-          <Route path="*" element={<div style={{ padding: 20 }}>Select or create a conversation.</div>} />
-        </Routes>
+        <div style={{ marginLeft: 250, flex: 1 }}>
+          <Routes>
+            <Route path="/chat/:id" element={<Chat />} />
+            <Route path="*" element={
+              <div style={{ 
+                padding: 20, 
+                backgroundColor: "#1e1e20",
+                color: "white",
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "18px"
+              }}>
+                Select or create a conversation.
+              </div>
+            } />
+          </Routes>
+        </div>
       </div>
     </Router>
   );
