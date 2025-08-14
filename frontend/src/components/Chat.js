@@ -194,20 +194,19 @@ function Chat() {
         <div style={{
           position: "fixed",
           bottom: 0,
-          left: 250, // Account for sidebar width
+          left: 275, // Account for sidebar width
           right: 0,
           backgroundColor: "#1e1e20",
           padding: "20px",
-          borderTop: "1px solid #40414f",
           zIndex: 1000,
           display: "flex",
           justifyContent: "center",
         }}>
           <div style={{
             display: "flex",
-            padding: "16px 20px",
+            padding: "8px 10px 8px 20px",
             backgroundColor: "#40414f",
-            borderRadius: "16px",
+            borderRadius: "30px",
             width: "1000px",
             maxWidth: "1000px",
             boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
