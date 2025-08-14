@@ -1,15 +1,34 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import EditNoteIcon from '@mui/icons-material/EditNote';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
 
 function Sidebar() {
   const [conversations, setConversations] = useState([]);
+  const [editingId, setEditingId] = useState(null);
+  const [editValue, setEditValue] = useState("");
   const navigate = useNavigate();
 
-  useEffect(() => {
+  const fetchConversations = () => {
     fetch("http://localhost:8000/conversations")
       .then((res) => res.json())
       .then(setConversations);
+  };
+
+  useEffect(() => {
+    fetchConversations();
+    
+    // Listen for conversation deletions from other components
+    const handleConversationDeleted = () => {
+      fetchConversations();
+    };
+    
+    window.addEventListener('conversationDeleted', handleConversationDeleted);
+    
+    return () => {
+      window.removeEventListener('conversationDeleted', handleConversationDeleted);
+    };
   }, []);
 
   const startNewChat = async () => {
@@ -18,6 +37,67 @@ function Sidebar() {
     });
     const data = await res.json();
     navigate(`/chat/${data.id}`);
+  };
+
+  const startEditing = (conversation) => {
+    setEditingId(conversation.id);
+    setEditValue(conversation.title || `Chat ${conversation.id}`);
+  };
+
+  const saveTitle = async (conversationId) => {
+    try {
+      await fetch(`http://localhost:8000/conversations/${conversationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: editValue.trim() || null }),
+      });
+      
+      setEditingId(null);
+      setEditValue("");
+      fetchConversations();
+    } catch (error) {
+      console.error("Error updating title:", error);
+      alert("Failed to update chat title");
+    }
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditValue("");
+  };
+
+  const handleKeyDown = (e, conversationId) => {
+    if (e.key === "Enter") {
+      saveTitle(conversationId);
+    } else if (e.key === "Escape") {
+      cancelEditing();
+    }
+  };
+
+  const deleteConversation = async (e, conversationId) => {
+    e.stopPropagation(); // Prevent navigation when clicking delete
+    
+    if (window.confirm("Are you sure you want to delete this conversation?")) {
+      try {
+        await fetch(`http://localhost:8000/conversations/${conversationId}`, {
+          method: "DELETE",
+        });
+        
+        // Dispatch event to notify other components
+        window.dispatchEvent(new CustomEvent('conversationDeleted'));
+        
+        // Refresh the conversations list
+        fetchConversations();
+        
+        // If we're currently in the deleted conversation, navigate to home
+        if (window.location.pathname === `/chat/${conversationId}`) {
+          navigate("/");
+        }
+      } catch (error) {
+        console.error("Error deleting conversation:", error);
+        alert("Failed to delete conversation");
+      }
+    }
   };
 
   return (
@@ -47,10 +127,75 @@ function Sidebar() {
             backgroundColor: "#343541",
             marginBottom: "10px",
             cursor: "pointer",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
           }}
           onClick={() => navigate(`/chat/${c.id}`)}
         >
-          {c.title || `Chat ${c.id}`}
+          <div style={{ flex: 1, marginRight: "8px" }}>
+            {editingId === c.id ? (
+              <input
+                type="text"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onKeyDown={(e) => handleKeyDown(e, c.id)}
+                onBlur={() => saveTitle(c.id)}
+                style={{
+                  width: "100%",
+                  backgroundColor: "#40414f",
+                  border: "1px solid #565869",
+                  color: "white",
+                  padding: "4px 8px",
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  outline: "none",
+                }}
+                autoFocus
+              />
+            ) : (
+              <span>{c.title || `Chat ${c.id}`}</span>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: "4px" }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                startEditing(c);
+              }}
+              style={{
+                backgroundColor: "transparent",
+                border: "none",
+                color: "#74c0fc",
+                cursor: "pointer",
+                padding: "4px",
+                borderRadius: "4px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              title="Rename conversation"
+            >
+              <EditIcon style={{ fontSize: "16px" }} />
+            </button>
+            <button
+              onClick={(e) => deleteConversation(e, c.id)}
+              style={{
+                backgroundColor: "transparent",
+                border: "none",
+                color: "#ff6b6b",
+                cursor: "pointer",
+                padding: "4px",
+                borderRadius: "4px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              title="Delete conversation"
+            >
+              <DeleteIcon style={{ fontSize: "16px" }} />
+            </button>
+          </div>
         </div>
       ))}
     </div>

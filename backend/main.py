@@ -68,6 +68,9 @@ class MessageCreate(BaseModel):
     role: str
     content: str
 
+class ConversationUpdate(BaseModel):
+    title: str = None
+
 class MessageOut(BaseModel):
     role: str
     content: str
@@ -96,6 +99,19 @@ def create_conversation(db: Session = Depends(get_db)):
     db.refresh(conv)
     return conv
 
+@app.patch("/conversations/{conversation_id}", response_model=ConversationOut)
+def update_conversation(conversation_id: int, update_data: ConversationUpdate, db: Session = Depends(get_db)):
+    conversation = db.query(Conversation).filter_by(id=conversation_id).first()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    if update_data.title is not None:
+        conversation.title = update_data.title if update_data.title.strip() else None
+    
+    db.commit()
+    db.refresh(conversation)
+    return conversation
+
 @app.get("/conversations/{conversation_id}/messages", response_model=List[MessageOut])
 def get_messages(conversation_id: int, db: Session = Depends(get_db)):
     return db.query(Message).filter_by(conversation_id=conversation_id).order_by(Message.timestamp).all()
@@ -109,3 +125,19 @@ def add_message(conversation_id: int, msg: MessageCreate, db: Session = Depends(
     db.commit()
     db.refresh(message)
     return message    
+
+@app.delete("/conversations/{conversation_id}")
+def delete_conversation(conversation_id: int, db: Session = Depends(get_db)):
+    conversation = db.query(Conversation).filter_by(id=conversation_id).first()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    # Delete all messages in the conversation first
+    db.query(Message).filter_by(conversation_id=conversation_id).delete()
+    
+    # Delete the conversation
+    db.delete(conversation)
+    db.commit()
+    
+    return {"message": "Conversation deleted successfully"}
+    
