@@ -192,7 +192,7 @@ function Chat({ isSidebarCollapsed }) {
           display: "flex",
           padding: 16,
           backgroundColor: "#40414f",
-          borderRadius: "12px",
+          borderRadius: "30px",
           width: '90%',
         }}>
           <input
