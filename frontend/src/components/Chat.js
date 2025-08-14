@@ -132,23 +132,6 @@ function Chat() {
           alignItems: 'center',
           paddingBottom: "120px", // Space for the fixed input bar
         }}>
-          {/* Chat Header */}
-          <div style={{
-            width: '1000px',
-            maxWidth: '1000px',
-            padding: "16px 20px",
-            borderBottom: "1px solid #40414f",
-            backgroundColor: "#171717",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            flexShrink: 0,
-            borderRadius: "0 0 12px 12px",
-            marginTop: "20px",
-          }}>
-            <h3 style={{ margin: 0, color: "#e3e3e3", fontSize: "18px" }}>Chat {id}</h3>
-          </div>
-
           {/* Content Area - No internal scrolling */}
           <div style={{ 
             width: '1000px',
