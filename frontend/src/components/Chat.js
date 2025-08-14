@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 function Chat({ isSidebarCollapsed }) {
   const { id } = useParams();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(null);
 
   useEffect(() => {
     fetch(`http://localhost:8000/conversations/${id}/messages`)
@@ -53,6 +56,116 @@ function Chat({ isSidebarCollapsed }) {
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter") handleSend();
+  };
+
+  const copyToClipboard = async (code, uniqueId) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedCode(uniqueId);
+      setTimeout(() => setCopiedCode(null), 2000); // Reset after 2 seconds
+    } catch (err) {
+      console.error('Failed to copy: ', err);
+    }
+  };
+
+  // Custom components for ReactMarkdown
+  const components = {
+    code({ node, inline, className, children, ...props }) {
+      const match = /language-(\w+)/.exec(className || '');
+      const codeString = String(children).replace(/\n$/, '');
+      
+      // Create unique identifier for each code block
+      const uniqueId = `${props.messageIndex}-${props.codeBlockIndex || 0}`;
+
+      if (!inline && match) {
+        return (
+          <div style={{ position: 'relative' }}>
+            <SyntaxHighlighter
+              style={oneDark}
+              language={match[1]}
+              PreTag="div"
+              customStyle={{
+                margin: 0,
+                borderRadius: "8px",
+                fontSize: "14px",
+                lineHeight: "1.4",
+                paddingTop: "40px", // Space for copy button
+              }}
+              {...props}
+            >
+              {codeString}
+            </SyntaxHighlighter>
+            
+            {/* Copy Button */}
+            <button
+              onClick={() => copyToClipboard(codeString, uniqueId)}
+              style={{
+                position: 'absolute',
+                top: '8px',
+                right: '8px',
+                backgroundColor: copiedCode === uniqueId ? '#10b981' : '#40414f',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '6px 12px',
+                fontSize: '12px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                zIndex: 10,
+              }}
+              onMouseEnter={(e) => {
+                if (copiedCode !== uniqueId) {
+                  e.target.style.backgroundColor = '#565869';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (copiedCode !== uniqueId) {
+                  e.target.style.backgroundColor = '#40414f';
+                }
+              }}
+            >
+              {copiedCode === uniqueId ? (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                  </svg>
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                  </svg>
+                  Copy
+                </>
+              )}
+            </button>
+          </div>
+        );
+      } else {
+        return (
+          <code className={className} {...props} style={{
+            backgroundColor: "#40414f",
+            padding: "2px 6px",
+            borderRadius: "4px",
+            fontSize: "14px",
+            color: "#e3e3e3",
+          }}>
+            {children}
+          </code>
+        );
+      }
+    },
+    pre({ children, ...props }) {
+      return (
+        <pre style={{ margin: 0 }} {...props}>
+          {children}
+        </pre>
+      );
+    },
   };
 
   return (
@@ -142,25 +255,42 @@ function Chat({ isSidebarCollapsed }) {
             flexDirection: "column",
             alignItems: "center",
           }}>
-            {messages.map((m, i) => (
-              <div key={i} style={{
-                marginBottom: "16px",
-                padding: "4px 12px 10px 12px",
-                borderRadius: "16px",
-                backgroundColor: m.role === "user" ? "#343541" : "#171717",
-                color: "white",
-                width: "fit-content",
-                maxWidth: "75%",
-                alignSelf: m.role === "user" ? "flex-end" : "flex-start",
-                marginLeft: m.role === "user" ? "auto" : undefined,
-                marginRight: m.role === "assistant" ? "auto" : undefined,
-                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-                // lineHeight: "1.5",
-              }}>
-                <ReactMarkdown>{m.content}</ReactMarkdown>
-                
-              </div>
-            ))}
+            {messages.map((m, i) => {
+              let codeBlockIndex = 0; // Track code blocks within this message
+              return (
+                <div key={i} style={{
+                  marginBottom: "16px",
+                  padding: "4px 12px 10px 12px",
+                  borderRadius: "16px",
+                  backgroundColor: m.role === "user" ? "#343541" : "#171717",
+                  color: "white",
+                  width: "fit-content",
+                  maxWidth: "75%",
+                  alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+                  marginLeft: m.role === "user" ? "auto" : undefined,
+                  marginRight: m.role === "assistant" ? "auto" : undefined,
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                  // lineHeight: "1.5",
+                }}>
+                  <ReactMarkdown 
+                    components={{
+                      ...components,
+                      code: (props) => {
+                        const result = components.code({ 
+                          ...props, 
+                          messageIndex: i,
+                          codeBlockIndex: codeBlockIndex++
+                        });
+                        return result;
+                      }
+                    }}
+                  >
+                    {m.content}
+                  </ReactMarkdown>
+                  
+                </div>
+              );
+            })}
             {loading && <div style={{ 
               padding: "16px 20px", 
               backgroundColor: "#171717",
