@@ -63,9 +63,17 @@ function Chat() {
       flexDirection: "column",
       alignItems: 'center',
       flex: 1,
-      justifyContent: 'center'
+      justifyContent: 'center',
+      height: "100vh",
+      position: "relative",
     }}>
-      <div style={{ width: '900px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{ 
+        width: '1000px', 
+        maxWidth: '1000px',
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center' 
+      }}>
         <div style={{ fontSize: '28px', marginBottom: '25px' }}>Where should we begin?</div>
         <div style={{
           display: "flex",
@@ -73,7 +81,6 @@ function Chat() {
           backgroundColor: "#40414f",
           borderRadius: "12px",
           width: '90%',
-
         }}>
           <input
             type="text"
@@ -113,43 +120,98 @@ function Chat() {
         color: "white",
         display: "flex",
         flexDirection: "column",
-        alignItems: 'center'
+        height: "100vh",
+        position: "relative",
+        overflowY: "auto",
       }}>
-        <div style={{ width: '900px' }}>
-          <div style={{ flex: 1, padding: 20, overflowY: "auto" }}>
+        <div style={{ 
+          width: '100%', 
+          minHeight: '100%',
+          display: 'flex', 
+          flexDirection: 'column',
+          alignItems: 'center',
+          paddingBottom: "120px", // Space for the fixed input bar
+        }}>
+          {/* Chat Header */}
+          <div style={{
+            width: '1000px',
+            maxWidth: '1000px',
+            padding: "16px 20px",
+            borderBottom: "1px solid #40414f",
+            backgroundColor: "#171717",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            flexShrink: 0,
+            borderRadius: "0 0 12px 12px",
+            marginTop: "20px",
+          }}>
+            <h3 style={{ margin: 0, color: "#e3e3e3", fontSize: "18px" }}>Chat {id}</h3>
+          </div>
+
+          {/* Content Area - No internal scrolling */}
+          <div style={{ 
+            width: '1000px',
+            maxWidth: '1000px',
+            flex: 1, 
+            padding: "20px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+          }}>
             {messages.map((m, i) => (
               <div key={i} style={{
-                marginBottom: "12px",
-                padding: "12px 16px",
-                borderRadius: "12px",
+                marginBottom: "16px",
+                padding: "16px 20px",
+                borderRadius: "16px",
                 backgroundColor: m.role === "user" ? "#343541" : "#171717",
                 color: "white",
                 width: "fit-content",
-                maxWidth: "80%",
+                maxWidth: "75%",
                 alignSelf: m.role === "user" ? "flex-end" : "flex-start",
                 marginLeft: m.role === "user" ? "auto" : undefined,
                 marginRight: m.role === "assistant" ? "auto" : undefined,
-                boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                lineHeight: "1.5",
               }}>
                 <ReactMarkdown>{m.content}</ReactMarkdown>
               </div>
             ))}
             {loading && <div style={{ 
-              padding: "12px 16px", 
+              padding: "16px 20px", 
               backgroundColor: "#171717",
-              borderRadius: "12px",
+              borderRadius: "16px",
               color: "#a0a0a0",
-              fontStyle: "italic"
+              fontStyle: "italic",
+              width: "fit-content",
+              alignSelf: "flex-start",
+              marginBottom: "16px",
             }}>Typing...</div>}
           </div>
+        </div>
 
+        {/* Fixed Input Bar at Bottom */}
+        <div style={{
+          position: "fixed",
+          bottom: 0,
+          left: 250, // Account for sidebar width
+          right: 0,
+          backgroundColor: "#1e1e20",
+          padding: "20px",
+          borderTop: "1px solid #40414f",
+          zIndex: 1000,
+          display: "flex",
+          justifyContent: "center",
+        }}>
           <div style={{
             display: "flex",
-            padding: 16,
+            padding: "16px 20px",
             backgroundColor: "#40414f",
-            borderRadius: "12px",
-            margin: "10px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+            borderRadius: "16px",
+            width: "1000px",
+            maxWidth: "1000px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+            gap: "12px",
           }}>
             <input
               type="text"
@@ -159,28 +221,39 @@ function Chat() {
               placeholder="Ask something..."
               style={{
                 flex: 1,
-                backgroundColor: "#40414f",
+                backgroundColor: "transparent",
                 border: "none",
                 color: "white",
                 fontSize: "16px",
                 outline: "none",
+                minHeight: "24px",
               }}
             />
             <button
               onClick={handleSend}
               style={{
-                backgroundColor: "#40414f",
+                backgroundColor: "#565869",
                 border: "none",
                 color: "white",
                 fontSize: "18px",
                 borderRadius: "50%",
-                width: "36px",
-                height: "36px",
+                width: "40px",
+                height: "40px",
                 cursor: "pointer",
-                transition: "background-color 0.2s",
+                transition: "all 0.2s ease",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
               }}
-              onMouseEnter={(e) => e.target.style.backgroundColor = "#565869"}
-              onMouseLeave={(e) => e.target.style.backgroundColor = "#40414f"}
+              onMouseEnter={(e) => {
+                e.target.style.backgroundColor = "#6b7280";
+                e.target.style.transform = "scale(1.05)";
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.backgroundColor = "#565869";
+                e.target.style.transform = "scale(1)";
+              }}
             >
               ➤
             </button>
