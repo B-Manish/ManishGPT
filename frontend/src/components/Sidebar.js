@@ -12,6 +12,7 @@ function Sidebar({ isCollapsed, onToggle }) {
   const [conversations, setConversations] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState("");
+  const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0, conversationId: null });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -28,6 +29,19 @@ function Sidebar({ isCollapsed, onToggle }) {
       window.removeEventListener('conversationDeleted', handleConversationDeleted);
     };
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (contextMenu.show) {
+        closeContextMenu();
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [contextMenu.show]);
 
   const fetchConversations = async () => {
     try {
@@ -121,50 +135,86 @@ function Sidebar({ isCollapsed, onToggle }) {
     }
   };
 
+  const handleContextMenu = (e, conversationId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // For right-click events, use clientX/clientY
+    // For left-click events, use getBoundingClientRect to position below the three dots
+    let x, y;
+    
+    if (e.type === 'contextmenu') {
+      x = e.clientX;
+      y = e.clientY;
+    } else {
+      // Left-click event - position below the three dots
+      const rect = e.target.getBoundingClientRect();
+      x = rect.left;
+      y = rect.bottom + 5;
+    }
+    
+    setContextMenu({
+      show: true,
+      x: x,
+      y: y,
+      conversationId: conversationId
+    });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu({ show: false, x: 0, y: 0, conversationId: null });
+  };
+
+  const handleRename = () => {
+    if (contextMenu.conversationId) {
+      const conversation = conversations.find(c => c.id === contextMenu.conversationId);
+      if (conversation) {
+        startEditing(conversation);
+      }
+    }
+    closeContextMenu();
+  };
+
+  const handleDelete = () => {
+    if (contextMenu.conversationId) {
+      deleteConversation({ stopPropagation: () => {} }, contextMenu.conversationId);
+    }
+    closeContextMenu();
+  };
+
   if (isCollapsed) {
     return (
       <div style={{
-        width: 60,
+        width: 40,
         backgroundColor: "#171717",
         color: "white",
-        padding: "10px 5px",
+        padding: "20px 20px",
         height: "100vh",
         position: "fixed",
         left: 0,
         top: 0,
         display: "flex",
         flexDirection: "column",
-        alignItems: "center",
+        alignItems: "flex-start",
         borderRight: "1px solid #40414f",
         zIndex: 1000,
         transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
         transform: "translateX(0)",
         animation: "slideInLeft 0.3s ease-out",
       }}>
-        {/* App Logo/Icon */}
-        <div style={{
+        {/* Expand Button in place of App Logo/Icon */}
+        <button onClick={onToggle} style={{
           width: "32px",
           height: "32px",
-          backgroundColor: "#3b82f6",
-          borderRadius: "8px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "18px",
-          fontWeight: "bold",
-          marginBottom: "20px",
-        }}>
-          <PsychologyIcon style={{ fontSize: "20px" }} />
-        </div>
-        
-        <button onClick={onToggle} style={{
           backgroundColor: "transparent",
           border: "none",
           color: "white",
           cursor: "pointer",
-          padding: "8px",
-          borderRadius: "6px",
-          marginBottom: "10px",
+          borderRadius: "8px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: "30px",
           transition: "all 0.2s ease",
         }} title="Expand sidebar">
           <ChevronRightIcon style={{ fontSize: "20px" }} />
@@ -175,12 +225,16 @@ function Sidebar({ isCollapsed, onToggle }) {
           border: "none",
           color: "white",
           cursor: "pointer",
-          padding: "8px",
-          borderRadius: "6px",
-          marginBottom: "10px",
+          padding: "12px 16px",
+          borderRadius: "8px",
+          marginBottom: "8px",
           transition: "all 0.2s ease",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "20px",
         }} title="New Chat">
-          <EditNoteIcon style={{ fontSize: "20px" }} />
+          <EditNoteIcon style={{ fontSize: "18px" }} />
         </button>
         
         <button style={{
@@ -188,12 +242,16 @@ function Sidebar({ isCollapsed, onToggle }) {
           border: "none",
           color: "white",
           cursor: "pointer",
-          padding: "8px",
-          borderRadius: "6px",
-          marginBottom: "10px",
+          padding: "12px 16px",
+          borderRadius: "8px",
+          marginBottom: "8px",
           transition: "all 0.2s ease",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "20px",
         }} title="Search chats">
-          <SearchIcon style={{ fontSize: "20px" }} />
+          <SearchIcon style={{ fontSize: "18px" }} />
         </button>
       </div>
     );
@@ -216,6 +274,7 @@ function Sidebar({ isCollapsed, onToggle }) {
       transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
       transform: "translateX(0)",
       animation: "slideInLeft 0.3s ease-out",
+      overflow: "hidden",
     }}>
       {/* Header */}
       <div style={{
@@ -223,12 +282,16 @@ function Sidebar({ isCollapsed, onToggle }) {
         justifyContent: "space-between",
         alignItems: "center",
         marginBottom: "30px",
+        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+        minHeight: "32px",
       }}>
         {/* App Logo */}
         <div style={{
           display: "flex",
           alignItems: "center",
           gap: "12px",
+          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+          minWidth: "32px",
         }}>
           <div style={{
             width: "32px",
@@ -238,10 +301,20 @@ function Sidebar({ isCollapsed, onToggle }) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+            flexShrink: 0,
           }}>
             <PsychologyIcon style={{ fontSize: "20px" }} />
           </div>
-          <span style={{ fontSize: "18px", fontWeight: "600" }}>ManishGPT</span>
+          <span style={{ 
+            fontSize: "18px", 
+            fontWeight: "600",
+            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+            opacity: 1,
+            transform: "translateX(0)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+          }}>ManishGPT</span>
         </div>
         
         {/* Collapse Button */}
@@ -252,7 +325,8 @@ function Sidebar({ isCollapsed, onToggle }) {
           cursor: "pointer",
           padding: "8px",
           borderRadius: "6px",
-          transition: "all 0.2s ease",
+          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+          flexShrink: 0,
         }} title="Collapse sidebar">
           <ChevronLeftIcon style={{ fontSize: "20px" }} />
         </button>
@@ -264,25 +338,36 @@ function Sidebar({ isCollapsed, onToggle }) {
         flexDirection: "column",
         gap: "8px",
         marginBottom: "30px",
+        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+        minHeight: "80px",
       }}>
         <button onClick={startNewChat} style={{
           backgroundColor: "transparent",
           border: "none",
           color: "white",
           cursor: "pointer",
-          padding: "12px 16px",
+          padding: "8px 10px",
           borderRadius: "8px",
           display: "flex",
           alignItems: "center",
           gap: "12px",
           fontSize: "14px",
-          transition: "all 0.2s ease",
+          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
           textAlign: "left",
           width: "100%",
+          overflow: "hidden",
+          minHeight: "36px",
         }} onMouseEnter={(e) => e.target.style.backgroundColor = "#40414f"}
            onMouseLeave={(e) => e.target.style.backgroundColor = "transparent"}>
-          <EditNoteIcon style={{ fontSize: "18px" }} />
-          New chat
+          <EditNoteIcon style={{ fontSize: "18px", flexShrink: 0 }} />
+          <span style={{
+            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+            opacity: 1,
+            transform: "translateX(0)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            flexShrink: 0,
+          }}>New chat</span>
         </button>
         
         <button style={{
@@ -290,19 +375,28 @@ function Sidebar({ isCollapsed, onToggle }) {
           border: "none",
           color: "white",
           cursor: "pointer",
-          padding: "12px 16px",
+          padding: "8px 10px",
           borderRadius: "8px",
           display: "flex",
           alignItems: "center",
           gap: "12px",
           fontSize: "14px",
-          transition: "all 0.2s ease",
+          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
           textAlign: "left",
           width: "100%",
+          overflow: "hidden",
+          minHeight: "36px",
         }} onMouseEnter={(e) => e.target.style.backgroundColor = "#40414f"}
            onMouseLeave={(e) => e.target.style.backgroundColor = "transparent"}>
-          <SearchIcon style={{ fontSize: "18px" }} />
-          Search chats
+          <SearchIcon style={{ fontSize: "18px", flexShrink: 0 }} />
+          <span style={{
+            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+            opacity: 1,
+            transform: "translateX(0)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            flexShrink: 0,
+          }}>Search chats</span>
         </button>
       </div>
 
@@ -317,10 +411,10 @@ function Sidebar({ isCollapsed, onToggle }) {
           <div
             key={c.id}
             style={{
-              padding: "12px 16px",
-              backgroundColor: "#343541",
+              padding: "8px 10px",
+              backgroundColor: "transparent",
               borderRadius: "8px",
-              marginBottom: "8px",
+              marginBottom: "4px",
               cursor: "pointer",
               transition: "all 0.2s ease",
               animation: `fadeInUp 0.3s ease-out ${index * 0.05}s both`,
@@ -329,8 +423,9 @@ function Sidebar({ isCollapsed, onToggle }) {
               alignItems: "center",
             }}
             onClick={() => navigate(`/chat/${c.id}`)}
+            onContextMenu={(e) => handleContextMenu(e, c.id)}
             onMouseEnter={(e) => e.target.style.backgroundColor = "#40414f"}
-            onMouseLeave={(e) => e.target.style.backgroundColor = "#343541"}
+            onMouseLeave={(e) => e.target.style.backgroundColor = "transparent"}
           >
             <div style={{ flex: 1, minWidth: 0 }}>
               {editingId === c.id ? (
@@ -362,33 +457,94 @@ function Sidebar({ isCollapsed, onToggle }) {
                 </span>
               )}
             </div>
-            <div style={{ display: "flex", gap: "4px", marginLeft: "8px", flexShrink: 0 }}>
-              <button onClick={(e) => { e.stopPropagation(); startEditing(c); }} style={{
-                backgroundColor: "transparent",
-                border: "none",
-                color: "white",
-                cursor: "pointer",
-                padding: "4px",
-                borderRadius: "4px",
-                transition: "all 0.2s ease",
-              }} title="Rename conversation">
-                <EditIcon style={{ fontSize: "14px" }} />
-              </button>
-              <button onClick={(e) => deleteConversation(e, c.id)} style={{
-                backgroundColor: "transparent",
-                border: "none",
-                color: "white",
-                cursor: "pointer",
-                padding: "4px",
-                borderRadius: "4px",
-                transition: "all 0.2s ease",
-              }} title="Delete conversation">
-                <DeleteIcon style={{ fontSize: "14px" }} />
-              </button>
+            <div style={{ 
+              display: "flex", 
+              alignItems: "center", 
+              marginLeft: "8px", 
+              flexShrink: 0,
+              color: "#9ca3af",
+              fontSize: "12px",
+              cursor: "pointer",
+              padding: "4px",
+              borderRadius: "4px",
+              transition: "all 0.2s ease",
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleContextMenu(e, c.id);
+            }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = "#565869"}
+            onMouseLeave={(e) => e.target.style.backgroundColor = "transparent"}
+            title="More options">
+              ⋯
             </div>
           </div>
         ))}
       </div>
+
+      {/* Context Menu */}
+      {contextMenu.show && (
+        <div
+          style={{
+            position: "fixed",
+            top: contextMenu.y,
+            left: contextMenu.x,
+            backgroundColor: "#40414f",
+            borderRadius: "8px",
+            padding: "8px 0",
+            boxShadow: "0 10px 25px rgba(0, 0, 0, 0.5)",
+            zIndex: 10000,
+            minWidth: "160px",
+            border: "1px solid #565869",
+          }}
+          onClick={closeContextMenu}
+        >
+          <button
+            onClick={handleRename}
+            style={{
+              width: "100%",
+              padding: "8px 16px",
+              backgroundColor: "transparent",
+              border: "none",
+              color: "white",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              fontSize: "14px",
+              textAlign: "left",
+              transition: "background-color 0.2s ease",
+            }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = "#565869"}
+            onMouseLeave={(e) => e.target.style.backgroundColor = "transparent"}
+          >
+            <EditIcon style={{ fontSize: "16px" }} />
+            Rename
+          </button>
+          <button
+            onClick={handleDelete}
+            style={{
+              width: "100%",
+              padding: "8px 16px",
+              backgroundColor: "transparent",
+              border: "none",
+              color: "#ef4444",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              fontSize: "14px",
+              textAlign: "left",
+              transition: "background-color 0.2s ease",
+            }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = "#565869"}
+            onMouseLeave={(e) => e.target.style.backgroundColor = "transparent"}
+          >
+            <DeleteIcon style={{ fontSize: "16px" }} />
+            Delete
+          </button>
+        </div>
+      )}
     </div>
   );
 }
