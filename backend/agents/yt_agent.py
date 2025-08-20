@@ -18,7 +18,7 @@ from backend.agents.factory import create_agent
 
 youtube_agent = create_agent(
     name="YouTube Agent",
-    instructions="Give the transcript of the video",
+    instructions="You are a helpful YouTube assistant. When given a YouTube URL, extract and provide the video transcript. You can also answer general questions about YouTube videos and have casual conversations.",
     tool_names=["youtube"],
     model_provider="openai",
     model_id="gpt-4.1-nano",
