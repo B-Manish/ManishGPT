@@ -1,30 +1,31 @@
 from textwrap import dedent
 
-from agno.agent import Agent
 from agno.models.openai import OpenAIChat
 from agno.models.groq import Groq
-from agno.tools.youtube import YouTubeTools
-from dotenv import load_dotenv
-import os
+import sys
+from pathlib import Path
 
-load_dotenv()
+# Ensure module imports work whether running from project root, backend/, or agents/
+_current_file = Path(__file__).resolve()
+_backend_dir = _current_file.parents[1]  # .../backend
+_project_root = _current_file.parents[2]  # .../ManishGPT
+for _p in (str(_project_root), str(_backend_dir)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+from backend.agents.factory import create_agent
 
 
-open_ai_api_key = os.getenv("OPENAI_API_KEY")
-groq_api_key = os.getenv("GROQ_API_KEY")
-
-youtube_agent = Agent(
+youtube_agent = create_agent(
     name="YouTube Agent",
-    model=OpenAIChat(id="gpt-4o-mini",api_key=open_ai_api_key),
-    # model=Groq(id="llama-3.3-70b-versatile",api_key=groq_api_key),
-    tools=[YouTubeTools()],
+    instructions="Give the transcript of the video",
+    tool_names=["youtube"],
+    model_provider="openai",
+    model_id="gpt-4.1-nano",
     show_tool_calls=True,
-    instructions="compare the data such as gpu temperarature, framerate , ram usage and gpu and cpu utilization of each game in the video",
-    debug_mode=True,
-    add_datetime_to_instructions=True,
-    markdown=True,
+    debug_mode=False,
 )
 
 
-result=youtube_agent.run("https://www.youtube.com/watch?v=iDRlfyQiveg&ab_channel=MarkPC")
-print("result",result.content)
+result = youtube_agent.run("https://www.youtube.com/watch?v=nRegbipwCsc&ab_channel=Mrwhosetheboss")
+print("result", result.content)
