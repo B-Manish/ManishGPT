@@ -399,46 +399,7 @@ function Sidebar({ isCollapsed, onToggle }) {
           }}>Search chats</span>
         </button>
         
-        <button onClick={() => navigate('/youtube-agent')} style={{
-          backgroundColor: "transparent",
-          border: "none",
-          color: "white",
-          cursor: "pointer",
-          padding: "8px 10px",
-          borderRadius: "8px",
-          display: "flex",
-          alignItems: "center",
-          gap: "12px",
-          fontSize: "14px",
-          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-          textAlign: "left",
-          width: "100%",
-          overflow: "hidden",
-          minHeight: "36px",
-        }} onMouseEnter={(e) => e.target.style.backgroundColor = "#40414f"}
-           onMouseLeave={(e) => e.target.style.backgroundColor = "transparent"}>
-          <div style={{
-            width: "18px",
-            height: "18px",
-            backgroundColor: "#ef4444",
-            borderRadius: "4px",
-            flexShrink: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "white",
-            fontSize: "12px",
-            fontWeight: "bold",
-          }}>YT</div>
-          <span style={{
-            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-            opacity: 1,
-            transform: "translateX(0)",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            flexShrink: 0,
-          }}>YouTube Agent</span>
-        </button>
+
       </div>
 
       {/* Conversations List */}

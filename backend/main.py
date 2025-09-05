@@ -7,9 +7,6 @@ from agno.models.groq import Groq
 from dotenv import load_dotenv
 import os
 from typing import Any, Dict, List, Optional
-from youtube_transcript_api import YouTubeTranscriptApi
-from litellm import completion
-from agno.tools import tool
 
 
 from sqlalchemy.orm import Session
@@ -18,7 +15,7 @@ from models import Base, Conversation, Message
 from typing import List
 from datetime import datetime
 
-from urllib.parse import parse_qs, urlencode, urlparse
+
 
 load_dotenv()
 
@@ -38,14 +35,36 @@ app.add_middleware(
 openai_api_key = os.getenv("OPENAI_API_KEY")
 groq_api_key = os.getenv("GROQ_API_KEY")
 
+# Import tools from registry
+from tools.registry import get_tools, TOOL_REGISTRY
+
+# Get all available tools automatically
+available_tools = get_tools(list(TOOL_REGISTRY.keys()))
+print(f"🔧 Loaded {len(available_tools)} tools: {[tool.name for tool in available_tools]}")
+
 agent = Agent(
     name="Basic Agent",
-    # model=OpenAIChat(id="gpt-4o", api_key=openai_api_key),
-    model=Groq(id="llama-3.3-70b-versatile",api_key=groq_api_key),
+    model=OpenAIChat(id="gpt-4o", api_key=openai_api_key),
+    # model=Groq(id="llama-3.3-70b-versatile",api_key=groq_api_key),
+    tools=available_tools,
+    instructions=[
+        "You are a helpful AI assistant with access to various tools. Automatically detect and use the appropriate tools based on the user's input:",
+        "- If the user mentions YouTube, provides a YouTube URL, or asks about video content, automatically use the YouTube tools to:",
+        "  * Extract video transcripts using get_transcript_from_video ONLY",
+        "  * Return the raw transcript text as provided by the tool - do not summarize or modify it",
+        "  * Handle any YouTube-related queries",
+        "- For general questions, conversations, or non-YouTube requests, respond conversationally without using tools",
+        "- Always be helpful, clear, and informative in your responses",
+        "- When using tools, explain what you're doing and provide the results in a user-friendly format",
+        f"- Available tools: {', '.join(TOOL_REGISTRY.keys())}"
+    ],
     add_history_to_messages=True,
     num_history_responses=5,
     add_datetime_to_instructions=True,
     markdown=True,
+    debug_mode=True,
+    show_tool_calls=True,
+    debug_level=2,
 )
 
 # Pydantic model for the request body
@@ -55,9 +74,33 @@ class Prompt(BaseModel):
 @app.post("/run-agent")
 async def run_agent(prompt: Prompt):
     try:
-        run = agent.run(prompt.message)
-        return {"response": run.content}
+        print(f"\n🚀 Running agent with message: {prompt.message}")
+        print(f"📋 Available tools: {[tool.name for tool in available_tools]}")
+        
+        import asyncio
+        import concurrent.futures
+        
+        # Run agent in thread pool with timeout
+        loop = asyncio.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            try:
+                # Run with 60 second timeout
+                run = await asyncio.wait_for(
+                    loop.run_in_executor(executor, agent.run, prompt.message),
+                    timeout=60.0
+                )
+                print(f"✅ Agent response length: {len(run.content)} characters")
+                print(f"📄 First 200 chars: {run.content[:200]}...")
+                print(f"📄 Last 200 chars: ...{run.content[-200:]}")
+                return {"response": run.content}
+            except asyncio.TimeoutError:
+                print("⏰ Agent request timed out after 60 seconds")
+                return {"error": "Request timed out. Please try again."}
+        
     except Exception as e:
+        print(f"❌ Agent error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return {"error": str(e)}
     
 
@@ -150,109 +193,11 @@ def delete_conversation(conversation_id: int, db: Session = Depends(get_db)):
 
 
 
-def get_youtube_video_id(url: str) -> Optional[str]:
-    """Function to get the video ID from a YouTube URL.
-
-    Args:
-        url: The URL of the YouTube video.
-
-    Returns:
-        str: The video ID of the YouTube video.
-    """
-    parsed_url = urlparse(url)
-    hostname = parsed_url.hostname
-
-    if hostname == "youtu.be":
-        return parsed_url.path[1:]
-    if hostname in ("www.youtube.com", "youtube.com"):
-        if parsed_url.path == "/watch":
-            query_params = parse_qs(parsed_url.query)
-            return query_params.get("v", [None])[0]
-        if parsed_url.path.startswith("/embed/"):
-            return parsed_url.path.split("/")[2]
-        if parsed_url.path.startswith("/v/"):
-            return parsed_url.path.split("/")[2]
-    return None
 
 
 
 
-@tool()
-def get_yt_video_summary(yt_url:str):
-    print("yt_url",yt_url)
-    video_id=get_youtube_video_id(yt_url)
-    if not video_id:
-        raise HTTPException(status_code=400, detail="Invalid YouTube URL")
-    ytt_api = YouTubeTranscriptApi()
-    transcript = ytt_api.fetch(video_id)
-    all_text = " ".join([snippet.text for snippet in transcript.snippets])
-
-    resp = completion(
-    model="gpt-5-nano",
-    messages=[{
-        "role": "user",
-        "content": [
-            {"type": "text", "text": f"Summarise this: {all_text}"},
-        ],
-    }],
-    )
-    summarized_text=resp.choices[0].message.content
-    output={"transcript":all_text,"summary":summarized_text}
-    print("gg output",output)
-    return output
 
 
-class MovieScript(BaseModel):
-    transript: str = Field(..., description="transcript of the yt video")
-    summary: str = Field(..., description="SUmmary of the yt video")
 
 
-yt_agent = Agent(
-    name="Yt Summarizer agent",
-    model=OpenAIChat(id="gpt-5-nano", api_key=openai_api_key),
-    # model=Groq(id="llama-3.3-70b-versatile",api_key=groq_api_key),
-    instructions=["You are a YouTube video summarizer. Only use the get_yt_video_summary tool when a user provides a YouTube URL. If no URL is provided, ask the user to provide a YouTube URL first. Do not call any tools unless a YouTube URL is explicitly shared. The user wants the raw tool output exactly as returned."],
-    tools=[get_yt_video_summary],
-    add_history_to_messages=True,
-    num_history_responses=5,
-    add_datetime_to_instructions=True,
-    markdown=True,
-    response_model=MovieScript,    
-)
-
-
-@app.post("/run-yt-summarizer-agent")
-async def run_yt_summarizer_agent(prompt: Prompt):
-    try:
-        run = yt_agent.run(prompt.message)
-        return {"response": run.content}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-# YouTube Agent API using the factory pattern
-try:
-    from backend.agents.factory import create_agent
-except ModuleNotFoundError:
-    from agents.factory import create_agent
-
-@app.post("/run-youtube-agent")
-async def run_youtube_agent(prompt: Prompt):
-    """Run the YouTube agent to get video transcripts and timestamps."""
-    try:
-        # Create the YouTube agent using the factory
-        youtube_agent = create_agent(
-            name="YouTube Agent",
-            instructions="Give the transcript of the video",
-            tool_names=["youtube"],
-            model_provider="openai",
-            model_id="gpt-4.1-nano",
-            show_tool_calls=True,
-            debug_mode=False,
-        )
-        
-        # Run the agent with the user's message
-        result = youtube_agent.run(prompt.message)
-        return {"response": result.content}
-    except Exception as e:
-        return {"error": str(e)}

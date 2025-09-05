@@ -18,12 +18,12 @@ load_dotenv()
 
 def create_agent(
     name: str,
-    instructions: str,
+    instructions: List[str],
     tool_names: Optional[List[str]] = None,
     model_provider: str = "openai",
-    model_id: str = "gpt-4.1-nano",
+    model_id: str = "gpt-4o",
     show_tool_calls: bool = True,
-    debug_mode: bool = False,
+    debug_mode: bool = True,
     markdown: bool = True,
 ) -> Agent:
     open_ai_api_key = os.getenv("OPENAI_API_KEY")
@@ -47,6 +47,8 @@ def create_agent(
         debug_mode=debug_mode,
         add_datetime_to_instructions=True,
         markdown=markdown,
+        add_history_to_messages=True,
+        num_history_responses=5,
     )
 
 

@@ -34,17 +34,15 @@ except ImportError:
 class YouTube_Tool(Toolkit):
     def __init__(
         self,
-        # languages: Optional[List[str]] = None,
-        # proxies: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
-        # self.languages: Optional[List[str]] = languages
-        # self.proxies: Optional[Dict[str, Any]] = proxies
+        print("gg YouTube_Tool init")
 
         tools: List[Any] = []
 
         tools.append(self.get_youtube_video_id)
         tools.append(self.get_transcript_from_video)
+        tools.append(self.summarize_transcript)
 
         super().__init__(name="youtube_tools", tools=tools, **kwargs)
 
@@ -82,12 +80,59 @@ class YouTube_Tool(Toolkit):
             str: The complete transcript text as a single string, with all snippets joined together.
                 Returns empty string if no transcript is available.
         """
-        video_id = self.get_youtube_video_id(url)
-        ytt_api = YouTubeTranscriptApi()
-        transcript = ytt_api.fetch(video_id)
-        all_text = " ".join([snippet.text for snippet in transcript.snippets])
-        # print("transcript from tool:",all_text)
-        return all_text
+        print(f"🔍 get_transcript_from_video called with URL: {url}")
+        try:
+            video_id = self.get_youtube_video_id(url)
+            print(f"📹 Extracted video ID: {video_id}")
+            
+            if not video_id:
+                return "Error: Could not extract video ID from URL"
+            
+            ytt_api = YouTubeTranscriptApi()
+            print("📝 Fetching transcript...")
+            transcript = ytt_api.fetch(video_id)
+            
+            # Join all transcript snippets with proper spacing
+            all_text = " ".join([snippet.text for snippet in transcript.snippets])
+            
+            print(f"✅ Transcript fetched successfully, length: {len(all_text)} characters")
+            print(f"📄 First 200 chars: {all_text[:200]}...")
+            print(f"📄 Last 200 chars: ...{all_text[-200:]}")
+            
+            # Ensure we return the full transcript
+            if len(all_text) == 0:
+                return "No transcript available for this video"
+            
+            return all_text
+        except Exception as e:
+            print(f"❌ Error in get_transcript_from_video: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return f"Error fetching transcript: {str(e)}"
+    
+    def summarize_transcript(self, transcript_text: str) -> str:
+        """Summarize the provided transcript text.
+        Args:
+            transcript_text (str): The transcript text to summarize.
+        Returns:
+            str: A concise summary of the transcript.
+        """
+        print(f"📊 summarize_transcript called with text length: {len(transcript_text)}")
+        try:
+            print("🤖 Calling OpenAI for summary...")
+            resp = completion(
+                model="gpt-4o-mini",
+                messages=[{
+                    "role": "user",
+                    "content": f"Please provide a concise summary of this transcript: {transcript_text}"
+                }],
+            )
+            summary = resp.choices[0].message.content
+            print(f"✅ Summary generated successfully, length: {len(summary)}")
+            return summary
+        except Exception as e:
+            print(f"❌ Error in summarize_transcript: {str(e)}")
+            return f"Error summarizing transcript: {str(e)}"
 
 
 
