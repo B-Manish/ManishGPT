@@ -13,7 +13,7 @@ except ModuleNotFoundError:
     from tools.registry import get_tools
 
 
-load_dotenv()
+load_dotenv("config.env")
 
 
 def create_agent(

@@ -17,7 +17,7 @@ from datetime import datetime
 
 
 
-load_dotenv()
+load_dotenv("config.env")
 
 app = FastAPI()
 
@@ -58,13 +58,9 @@ agent = Agent(
         "- When using tools, explain what you're doing and provide the results in a user-friendly format",
         f"- Available tools: {', '.join(TOOL_REGISTRY.keys())}"
     ],
-    add_history_to_messages=True,
-    num_history_responses=5,
-    add_datetime_to_instructions=True,
-    markdown=True,
+    # show_tool_calls=True,
     debug_mode=True,
-    show_tool_calls=True,
-    debug_level=2,
+    markdown=True,
 )
 
 # Pydantic model for the request body
