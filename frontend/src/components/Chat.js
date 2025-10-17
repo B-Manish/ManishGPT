@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { userAPI } from '../services/api';
 
 function Chat({ isSidebarCollapsed }) {
   const { id } = useParams();
@@ -12,46 +13,39 @@ function Chat({ isSidebarCollapsed }) {
   const [copiedCode, setCopiedCode] = useState(null);
 
   useEffect(() => {
-    fetch(`http://localhost:8000/conversations/${id}/messages`)
-      .then((res) => res.json())
-      .then(setMessages);
+    if (id) {
+      userAPI.getMessages(id)
+        .then(setMessages)
+        .catch(error => console.error('Error fetching messages:', error));
+    }
   }, [id]);
 
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || !id) return;
 
     const userMsg = { role: "user", content: input };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setLoading(true);
 
-    await fetch(`http://localhost:8000/conversations/${id}/message`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(userMsg),
-    });
-
-    const res = await fetch("http://localhost:8000/run-agent", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: input }),
-    });
-
-    const data = await res.json();
-
-    const assistantMsg = {
-      role: "assistant",
-      content: data.response,
-    };
-
-    await fetch(`http://localhost:8000/conversations/${id}/message`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(assistantMsg),
-    });
-
-    setMessages((prev) => [...prev, assistantMsg]);
-    setLoading(false);
+    try {
+      await userAPI.sendMessage(id, input);
+      
+      // TODO: Get AI response from persona
+      // For now, add a placeholder response
+      const assistantMsg = {
+        role: "assistant",
+        content: "I received your message! The AI response will be implemented soon.",
+      };
+      
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      // Remove the user message if sending failed
+      setMessages((prev) => prev.slice(0, -1));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleKeyDown = (e) => {

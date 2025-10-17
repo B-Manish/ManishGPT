@@ -8,6 +8,7 @@ dependencies = [
     "uvicorn",
     "sqlalchemy",
     "pydantic",
+    "pydantic[email]",
     "python-dotenv",
     "psycopg2-binary",
     "alembic",
@@ -18,7 +19,10 @@ dependencies = [
     "yt-dlp",
     "numpy",
     "pillow",
-    "groq"
+    "groq",
+    "pyjwt",
+    "bcrypt",
+    "python-multipart"
 ]
 
 [build-system]

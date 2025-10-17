@@ -1,17 +1,34 @@
-from fastapi import FastAPI, Request,Depends, HTTPException
+from fastapi import FastAPI, Request, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, Field, EmailStr
 from agno.agent import Agent
 from agno.models.openai import OpenAIChat
 from agno.models.groq import Groq
 from dotenv import load_dotenv
 import os
+import jwt
+import bcrypt
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 
 from sqlalchemy.orm import Session
 from database import engine, SessionLocal
-from models import Base, Conversation, Message
+from models import (
+    Base, 
+    User, 
+    UserRole,
+    Persona, 
+    UserPersona, 
+    Tool, 
+    PersonaTool,
+    Conversation, 
+    Message, 
+    ToolUsage, 
+    AgentInteraction, 
+    ConversationAnalytics
+)
 from typing import List
 from datetime import datetime
 
@@ -19,7 +36,100 @@ from datetime import datetime
 
 load_dotenv("config.env")
 
+# Authentication configuration
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+# Security
+security = HTTPBearer()
+
 app = FastAPI()
+
+# Database dependency
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# Authentication dependency
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    try:
+        token = credentials.credentials
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: int = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    user = db.query(User).join(UserRole).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+def get_current_admin_user(current_user: User = Depends(get_current_user)):
+    if current_user.user_role.name != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user
+
+# Pydantic Schemas
+class UserCreate(BaseModel):
+    email: EmailStr
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=6)
+    role_id: int = Field(..., description="User role ID")
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    username: str
+    role_id: int
+    role_name: str
+    is_active: bool
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class UserRoleResponse(BaseModel):
+    id: int
+    name: str
+    description: str
+    is_active: bool
+    
+    class Config:
+        from_attributes = True
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = Field(None, min_length=3, max_length=50)
+    email: Optional[EmailStr] = None
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=6)
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class UserListResponse(BaseModel):
+    users: List[UserResponse]
+    total: int
+
+class UserAssignPersona(BaseModel):
+    user_id: int
+    persona_id: int
+
+class UserDeactivate(BaseModel):
+    user_id: int
+    reason: Optional[str] = None
 
 Base.metadata.create_all(bind=engine)
 
@@ -62,6 +172,27 @@ agent = Agent(
     debug_mode=True,
     markdown=True,
 )
+
+# Authentication helper functions
+def hash_password(password: str) -> str:
+    """Hash a password using bcrypt"""
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+
+def verify_password(password: str, hashed_password: str) -> bool:
+    """Verify a password against its hash"""
+    return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    """Create JWT access token"""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
 
 # Pydantic model for the request body
 class Prompt(BaseModel):
@@ -186,7 +317,762 @@ def delete_conversation(conversation_id: int, db: Session = Depends(get_db)):
     
     return {"message": "Conversation deleted successfully"}
     
+# =============================================================================
+# USER MANAGEMENT ENDPOINTS
+# =============================================================================
 
+# Authentication Endpoints
+@app.post("/auth/register", response_model=UserResponse)
+def register_user(user: UserCreate, db: Session = Depends(get_db)):
+    """Register a new user"""
+    # Check if user already exists
+    existing_user = db.query(User).filter(
+        (User.email == user.email) | (User.username == user.username)
+    ).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=400, 
+            detail="Email or username already registered"
+        )
+    
+    # Create new user
+    hashed_password = hash_password(user.password)
+    db_user = User(
+        email=user.email,
+        username=user.username,
+        hashed_password=hashed_password,
+        role="user",
+        is_active=True
+    )
+    
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    
+    return db_user
+
+@app.post("/auth/login", response_model=Token)
+def login_user(user_credentials: UserLogin, db: Session = Depends(get_db)):
+    """Login user and return access token"""
+    user = db.query(User).filter(User.email == user_credentials.email).first()
+    
+    if not user or not verify_password(user_credentials.password, user.hashed_password):
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect email or password"
+        )
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=401,
+            detail="Account is deactivated"
+        )
+    
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": str(user.id)}, expires_delta=access_token_expires
+    )
+    
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/auth/me", response_model=UserResponse)
+def get_current_user_info(current_user: User = Depends(get_current_user)):
+    """Get current user information"""
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "username": current_user.username,
+        "role_id": current_user.role_id,
+        "role_name": current_user.user_role.name,
+        "is_active": current_user.is_active,
+        "created_at": current_user.created_at
+    }
+
+# User Profile Management
+@app.put("/users/profile", response_model=UserResponse)
+def update_user_profile(
+    user_update: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update user profile"""
+    # Check if email is already taken by another user
+    if user_update.email and user_update.email != current_user.email:
+        existing_user = db.query(User).filter(User.email == user_update.email).first()
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Email already taken")
+    
+    # Check if username is already taken by another user
+    if user_update.username and user_update.username != current_user.username:
+        existing_user = db.query(User).filter(User.username == user_update.username).first()
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Username already taken")
+    
+    # Update user fields
+    if user_update.username:
+        current_user.username = user_update.username
+    if user_update.email:
+        current_user.email = user_update.email
+    
+    current_user.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(current_user)
+    
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "username": current_user.username,
+        "role_id": current_user.role_id,
+        "role_name": current_user.user_role.name,
+        "is_active": current_user.is_active,
+        "created_at": current_user.created_at
+    }
+
+@app.post("/users/change-password")
+def change_password(
+    password_change: PasswordChange,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Change user password"""
+    # Verify current password
+    if not verify_password(password_change.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    
+    # Update password
+    current_user.hashed_password = hash_password(password_change.new_password)
+    current_user.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return {"message": "Password changed successfully"}
+
+# Admin User Management Endpoints
+@app.get("/admin/users", response_model=UserListResponse)
+def get_all_users(
+    skip: int = 0,
+    limit: int = 100,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get all users (Admin only)"""
+    users = db.query(User).join(UserRole).offset(skip).limit(limit).all()
+    total = db.query(User).count()
+    
+    # Convert to response format with role information
+    user_responses = []
+    for user in users:
+        user_responses.append({
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "role_id": user.role_id,
+            "role_name": user.user_role.name,
+            "is_active": user.is_active,
+            "created_at": user.created_at
+        })
+    
+    return UserListResponse(users=user_responses, total=total)
+
+@app.get("/admin/users/{user_id}", response_model=UserResponse)
+def get_user_by_id(
+    user_id: int,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get user by ID (Admin only)"""
+    user = db.query(User).join(UserRole).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {
+        "id": user.id,
+        "email": user.email,
+        "username": user.username,
+        "role_id": user.role_id,
+        "role_name": user.user_role.name,
+        "is_active": user.is_active,
+        "created_at": user.created_at
+    }
+
+@app.put("/admin/users/{user_id}/role")
+def update_user_role(
+    user_id: int,
+    new_role: str,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Update user role (Admin only)"""
+    if new_role not in ["admin", "user"]:
+        raise HTTPException(status_code=400, detail="Invalid role. Must be 'admin' or 'user'")
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get the role_id for the new role
+    role = db.query(UserRole).filter(UserRole.name == new_role).first()
+    if not role:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    
+    user.role_id = role.id
+    user.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return {"message": f"User role updated to {new_role}"}
+
+@app.post("/admin/users/{user_id}/deactivate")
+def deactivate_user(
+    user_id: int,
+    deactivate_data: UserDeactivate,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Deactivate user account (Admin only)"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if user.id == admin_user.id:
+        raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
+    
+    user.is_active = False
+    user.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return {"message": "User deactivated successfully"}
+
+@app.post("/admin/users/{user_id}/activate")
+def activate_user(
+    user_id: int,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Activate user account (Admin only)"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    user.is_active = True
+    user.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return {"message": "User activated successfully"}
+
+@app.post("/admin/users/{user_id}/assign-persona")
+def assign_persona_to_user(
+    user_id: int,
+    assignment: UserAssignPersona,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Assign persona to user (Admin only)"""
+    # Verify user exists
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Verify persona exists
+    persona = db.query(Persona).filter(Persona.id == assignment.persona_id).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    
+    # Check if assignment already exists
+    existing_assignment = db.query(UserPersona).filter(
+        UserPersona.user_id == user_id,
+        UserPersona.persona_id == assignment.persona_id
+    ).first()
+    
+    if existing_assignment:
+        if existing_assignment.is_active:
+            raise HTTPException(status_code=400, detail="Persona already assigned to user")
+        else:
+            # Reactivate existing assignment
+            existing_assignment.is_active = True
+            existing_assignment.assigned_at = datetime.utcnow()
+            existing_assignment.assigned_by_admin_id = admin_user.id
+    else:
+        # Create new assignment
+        user_persona = UserPersona(
+            user_id=user_id,
+            persona_id=assignment.persona_id,
+            assigned_by_admin_id=admin_user.id,
+            is_active=True
+        )
+        db.add(user_persona)
+    
+    db.commit()
+    return {"message": "Persona assigned to user successfully"}
+
+@app.delete("/admin/users/{user_id}/personas/{persona_id}")
+def remove_persona_from_user(
+    user_id: int,
+    persona_id: int,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Remove persona from user (Admin only)"""
+    assignment = db.query(UserPersona).filter(
+        UserPersona.user_id == user_id,
+        UserPersona.persona_id == persona_id
+    ).first()
+    
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Persona assignment not found")
+    
+    assignment.is_active = False
+    db.commit()
+    
+    return {"message": "Persona removed from user successfully"}
+
+@app.get("/admin/users/{user_id}/personas")
+def get_user_personas(
+    user_id: int,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get all personas assigned to a user (Admin only)"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    assignments = db.query(UserPersona).filter(
+        UserPersona.user_id == user_id,
+        UserPersona.is_active == True
+    ).all()
+    
+    personas = []
+    for assignment in assignments:
+        persona = db.query(Persona).filter(Persona.id == assignment.persona_id).first()
+        if persona:
+            personas.append({
+                "id": persona.id,
+                "name": persona.name,
+                "description": persona.description,
+                "assigned_at": assignment.assigned_at
+            })
+    
+    return {"user_id": user_id, "personas": personas}
+
+# User Role Management
+@app.get("/admin/user-roles", response_model=List[UserRoleResponse])
+def get_user_roles(
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get all user roles (Admin only)"""
+    roles = db.query(UserRole).filter(UserRole.is_active == True).all()
+    return roles
+
+@app.post("/admin/users", response_model=UserResponse)
+def create_user_by_admin(
+    user_data: UserCreate,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new user (Admin only)"""
+    # Check if user already exists
+    existing_user = db.query(User).filter(
+        (User.email == user_data.email) | (User.username == user_data.username)
+    ).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=400, 
+            detail="Email or username already registered"
+        )
+    
+    # Verify role exists
+    role = db.query(UserRole).filter(UserRole.id == user_data.role_id).first()
+    if not role:
+        raise HTTPException(status_code=400, detail="Invalid role ID")
+    
+    # Create new user
+    hashed_password = hash_password(user_data.password)
+    db_user = User(
+        email=user_data.email,
+        username=user_data.username,
+        hashed_password=hashed_password,
+        role_id=user_data.role_id,
+        is_active=True
+    )
+    
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    
+    # Return user with role information
+    return {
+        "id": db_user.id,
+        "email": db_user.email,
+        "username": db_user.username,
+        "role_id": db_user.role_id,
+        "role_name": role.name,
+        "is_active": db_user.is_active,
+        "created_at": db_user.created_at
+    }
+
+# =============================================================================
+# USER ENDPOINTS (For regular users)
+# =============================================================================
+
+@app.get("/user/personas")
+def get_user_personas(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get personas assigned to current user"""
+    assignments = db.query(UserPersona).filter(
+        UserPersona.user_id == current_user.id,
+        UserPersona.is_active == True
+    ).all()
+    
+    personas = []
+    for assignment in assignments:
+        persona = db.query(Persona).filter(Persona.id == assignment.persona_id).first()
+        if persona and persona.is_active:
+            personas.append({
+                "id": persona.id,
+                "name": persona.name,
+                "description": persona.description,
+                "instructions": persona.instructions,
+                "model_provider": persona.model_provider,
+                "model_id": persona.model_id
+            })
+    
+    return {"personas": personas}
+
+@app.get("/user/conversations")
+def get_user_conversations(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get conversations for current user"""
+    conversations = db.query(Conversation).filter(
+        Conversation.user_id == current_user.id
+    ).order_by(Conversation.updated_at.desc()).all()
+    
+    return {"conversations": conversations}
+
+@app.post("/user/conversations")
+def create_user_conversation(
+    conversation_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new conversation for current user"""
+    persona_id = conversation_data.get("persona_id")
+    if not persona_id:
+        raise HTTPException(status_code=400, detail="persona_id is required")
+    
+    # Verify persona is assigned to user
+    assignment = db.query(UserPersona).filter(
+        UserPersona.user_id == current_user.id,
+        UserPersona.persona_id == persona_id,
+        UserPersona.is_active == True
+    ).first()
+    
+    if not assignment:
+        raise HTTPException(status_code=403, detail="Persona not assigned to user")
+    
+    conversation = Conversation(
+        user_id=current_user.id,
+        persona_id=persona_id,
+        status="active"
+    )
+    
+    db.add(conversation)
+    db.commit()
+    db.refresh(conversation)
+    
+    return conversation
+
+@app.get("/user/conversations/{conversation_id}")
+def get_user_conversation(
+    conversation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get a specific conversation for current user"""
+    conversation = db.query(Conversation).filter(
+        Conversation.id == conversation_id,
+        Conversation.user_id == current_user.id
+    ).first()
+    
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    return conversation
+
+@app.get("/user/conversations/{conversation_id}/messages")
+def get_conversation_messages(
+    conversation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get messages for a conversation"""
+    # Verify conversation belongs to user
+    conversation = db.query(Conversation).filter(
+        Conversation.id == conversation_id,
+        Conversation.user_id == current_user.id
+    ).first()
+    
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    messages = db.query(Message).filter(
+        Message.conversation_id == conversation_id
+    ).order_by(Message.timestamp.asc()).all()
+    
+    return messages
+
+@app.post("/user/conversations/{conversation_id}/messages")
+def send_message(
+    conversation_id: int,
+    message_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Send a message in a conversation"""
+    # Verify conversation belongs to user
+    conversation = db.query(Conversation).filter(
+        Conversation.id == conversation_id,
+        Conversation.user_id == current_user.id
+    ).first()
+    
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    content = message_data.get("content")
+    if not content:
+        raise HTTPException(status_code=400, detail="content is required")
+    
+    # Create user message
+    user_message = Message(
+        conversation_id=conversation_id,
+        content=content,
+        sender_type="user",
+        timestamp=datetime.utcnow()
+    )
+    
+    db.add(user_message)
+    db.commit()
+    db.refresh(user_message)
+    
+    # TODO: Process message with persona and get AI response
+    # For now, return the user message
+    return user_message
+
+# =============================================================================
+# PERSONA MANAGEMENT ENDPOINTS
+# =============================================================================
+
+# Persona CRUD Operations
+@app.post("/admin/personas", response_model=dict)
+def create_persona(
+    persona_data: dict,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new persona (Admin only)"""
+    # Validate required fields
+    required_fields = ["name", "instructions", "model_provider", "model_id"]
+    for field in required_fields:
+        if field not in persona_data:
+            raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+    
+    # Check if persona name already exists
+    existing_persona = db.query(Persona).filter(Persona.name == persona_data["name"]).first()
+    if existing_persona:
+        raise HTTPException(status_code=400, detail="Persona name already exists")
+    
+    # Create persona
+    persona = Persona(
+        name=persona_data["name"],
+        description=persona_data.get("description", ""),
+        instructions=persona_data["instructions"],
+        model_provider=persona_data["model_provider"],
+        model_id=persona_data["model_id"],
+        created_by_admin_id=admin_user.id,
+        is_active=True
+    )
+    
+    db.add(persona)
+    db.commit()
+    db.refresh(persona)
+    
+    return {
+        "id": persona.id,
+        "name": persona.name,
+        "description": persona.description,
+        "instructions": persona.instructions,
+        "model_provider": persona.model_provider,
+        "model_id": persona.model_id,
+        "created_at": persona.created_at,
+        "message": "Persona created successfully"
+    }
+
+@app.get("/admin/personas", response_model=List[dict])
+def get_all_personas(
+    skip: int = 0,
+    limit: int = 100,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get all personas (Admin only)"""
+    personas = db.query(Persona).offset(skip).limit(limit).all()
+    
+    return [
+        {
+            "id": persona.id,
+            "name": persona.name,
+            "description": persona.description,
+            "instructions": persona.instructions,
+            "model_provider": persona.model_provider,
+            "model_id": persona.model_id,
+            "is_active": persona.is_active,
+            "created_at": persona.created_at,
+            "created_by": persona.created_by_admin.email if persona.created_by_admin else None
+        }
+        for persona in personas
+    ]
+
+@app.get("/admin/personas/{persona_id}", response_model=dict)
+def get_persona_by_id(
+    persona_id: int,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get persona by ID (Admin only)"""
+    persona = db.query(Persona).filter(Persona.id == persona_id).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    
+    return {
+        "id": persona.id,
+        "name": persona.name,
+        "description": persona.description,
+        "instructions": persona.instructions,
+        "model_provider": persona.model_provider,
+        "model_id": persona.model_id,
+        "is_active": persona.is_active,
+        "created_at": persona.created_at,
+        "created_by": persona.created_by_admin.email if persona.created_by_admin else None
+    }
+
+@app.put("/admin/personas/{persona_id}")
+def update_persona(
+    persona_id: int,
+    persona_data: dict,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Update persona (Admin only)"""
+    persona = db.query(Persona).filter(Persona.id == persona_id).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    
+    # Update fields if provided
+    if "name" in persona_data:
+        # Check if new name already exists
+        existing_persona = db.query(Persona).filter(
+            Persona.name == persona_data["name"],
+            Persona.id != persona_id
+        ).first()
+        if existing_persona:
+            raise HTTPException(status_code=400, detail="Persona name already exists")
+        persona.name = persona_data["name"]
+    
+    if "description" in persona_data:
+        persona.description = persona_data["description"]
+    
+    if "instructions" in persona_data:
+        persona.instructions = persona_data["instructions"]
+    
+    if "model_provider" in persona_data:
+        persona.model_provider = persona_data["model_provider"]
+    
+    if "model_id" in persona_data:
+        persona.model_id = persona_data["model_id"]
+    
+    persona.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return {"message": "Persona updated successfully"}
+
+@app.delete("/admin/personas/{persona_id}")
+def delete_persona(
+    persona_id: int,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Delete persona (Admin only)"""
+    persona = db.query(Persona).filter(Persona.id == persona_id).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    
+    # Check if persona is assigned to any users
+    active_assignments = db.query(UserPersona).filter(
+        UserPersona.persona_id == persona_id,
+        UserPersona.is_active == True
+    ).count()
+    
+    if active_assignments > 0:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Cannot delete persona. It is currently assigned to {active_assignments} user(s). Remove assignments first."
+        )
+    
+    # Soft delete by deactivating
+    persona.is_active = False
+    persona.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return {"message": "Persona deleted successfully"}
+
+@app.post("/admin/personas/{persona_id}/activate")
+def activate_persona(
+    persona_id: int,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Activate persona (Admin only)"""
+    persona = db.query(Persona).filter(Persona.id == persona_id).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    
+    persona.is_active = True
+    persona.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return {"message": "Persona activated successfully"}
+
+@app.get("/admin/personas/{persona_id}/users")
+def get_persona_users(
+    persona_id: int,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get all users assigned to a persona (Admin only)"""
+    persona = db.query(Persona).filter(Persona.id == persona_id).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    
+    assignments = db.query(UserPersona).filter(
+        UserPersona.persona_id == persona_id,
+        UserPersona.is_active == True
+    ).all()
+    
+    users = []
+    for assignment in assignments:
+        user = db.query(User).filter(User.id == assignment.user_id).first()
+        if user:
+            users.append({
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "assigned_at": assignment.assigned_at
+            })
+    
+    return {"persona_id": persona_id, "persona_name": persona.name, "users": users}
 
 
 
