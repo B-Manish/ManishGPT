@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import PersonaManagement from './PersonaManagement';
 import UserManagement from './UserManagement';
-import AssignmentManagement from './AssignmentManagement';
+import ToolsManagement from './ToolsManagement';
+import AgentsManagement from './AgentsManagement';
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
@@ -10,18 +11,21 @@ const Dashboard = () => {
 
   const tabs = [
     { id: 'personas', name: 'Personas', icon: '🤖' },
+    { id: 'agents', name: 'Agents', icon: '👤' },
     { id: 'users', name: 'Users', icon: '👥' },
-    { id: 'assignments', name: 'Assignments', icon: '🔗' },
+    { id: 'tools', name: 'Tools', icon: '🔧' },
   ];
 
   const renderContent = () => {
     switch (activeTab) {
       case 'personas':
         return <PersonaManagement />;
+      case 'agents':
+        return <AgentsManagement />;
       case 'users':
         return <UserManagement />;
-      case 'assignments':
-        return <AssignmentManagement />;
+      case 'tools':
+        return <ToolsManagement />;
       default:
         return <PersonaManagement />;
     }

@@ -28,12 +28,21 @@ const PersonaManagement = () => {
     }
   };
 
-  const handleCreatePersona = async (personaData) => {
+  const handleCreatePersona = async (id, personaData) => {
     try {
-      await personaAPI.create(personaData);
+      console.log('Creating persona with data:', personaData); // Debug log
+      console.log('Data type:', typeof personaData);
+      console.log('Data keys:', Object.keys(personaData));
+      
+      const result = await personaAPI.create(personaData);
+      console.log('Persona creation result:', result);
+      
       await loadPersonas();
       setShowForm(false);
     } catch (err) {
+      console.error('Persona creation error:', err); // Debug log
+      console.error('Error response:', err.response);
+      console.error('Error data:', err.response?.data);
       setError(err.response?.data?.detail || 'Failed to create persona');
     }
   };
@@ -67,6 +76,10 @@ const PersonaManagement = () => {
   const handleCloseForm = () => {
     setShowForm(false);
     setEditingPersona(null);
+  };
+
+  const handlePersonaUpdate = (updatedPersona) => {
+    setPersonas(personas.map(p => p.id === updatedPersona.id ? updatedPersona : p));
   };
 
   if (loading) {
@@ -110,6 +123,7 @@ const PersonaManagement = () => {
                   persona={persona}
                   onEdit={handleEditPersona}
                   onDelete={handleDeletePersona}
+                  onPersonaUpdate={handlePersonaUpdate}
                 />
               ))}
             </div>

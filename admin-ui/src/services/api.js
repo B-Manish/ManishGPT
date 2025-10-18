@@ -38,8 +38,8 @@ api.interceptors.response.use(
 
 // Auth API
 export const authAPI = {
-  login: async (email, password) => {
-    const response = await api.post('/auth/login', { email, password });
+  login: async (username, password) => {
+    const response = await api.post('/auth/login', { username, password });
     return response.data;
   },
   
@@ -62,7 +62,12 @@ export const personaAPI = {
   },
   
   create: async (personaData) => {
+    console.log('personaAPI.create called with:', personaData);
+    console.log('Data type:', typeof personaData);
+    console.log('Data keys:', Object.keys(personaData));
+    
     const response = await api.post('/admin/personas', personaData);
+    console.log('API response:', response);
     return response.data;
   },
   
@@ -138,6 +143,11 @@ export const userAPI = {
     const response = await api.delete(`/admin/users/${userId}/personas/${personaId}`);
     return response.data;
   },
+  
+  getPersonaUsers: async (personaId) => {
+    const response = await api.get(`/admin/personas/${personaId}/users`);
+    return response.data;
+  },
 };
 
 // User Role API
@@ -146,6 +156,65 @@ export const userRoleAPI = {
     const response = await api.get('/admin/user-roles');
     return response.data;
   },
+};
+
+// Agent API
+export const agentAPI = {
+  // Get all agents
+  getAll: async () => {
+    const response = await api.get('/admin/agents');
+    return response.data.agents || []; // Return just the agents array
+  },
+  
+  // Create standalone agent
+  create: async (agentData) => {
+    const response = await api.post('/admin/agents', agentData);
+    return response.data;
+  },
+  
+  // Get agents for a persona
+  getByPersona: async (personaId) => {
+    const response = await api.get(`/admin/personas/${personaId}/agents`);
+    return response.data.agents || []; // Return just the agents array
+  },
+  
+  // Attach agent to persona
+  attachToPersona: async (personaId, agentId) => {
+    const response = await api.post(`/admin/personas/${personaId}/attach-agent/${agentId}`);
+    return response.data;
+  },
+  
+  // Detach agent from persona
+  detachFromPersona: async (personaId, agentId) => {
+    const response = await api.post(`/admin/personas/${personaId}/detach-agent/${agentId}`);
+    return response.data;
+  },
+  
+  // Get team info for a persona
+  getTeamInfo: async (personaId) => {
+    const response = await api.get(`/admin/personas/${personaId}/team-info`);
+    return response.data;
+  },
+  
+  // Create default team leader
+  createTeamLeader: async (personaId) => {
+    const response = await api.post(`/admin/personas/${personaId}/create-team-leader`);
+    return response.data;
+  },
+  
+  // Delete agent
+  delete: async (agentId) => {
+    const response = await api.delete(`/admin/agents/${agentId}`);
+    return response.data;
+  }
+};
+
+// Tools API
+export const toolAPI = {
+  getAll: async () => {
+    const response = await api.get('/admin/tools');
+    return response.data;
+  }
 };
 
 export default api;

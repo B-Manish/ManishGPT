@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 
 const Login = () => {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -17,7 +17,7 @@ const Login = () => {
     setLoading(true);
     setError('');
 
-    const result = await login(email, password);
+    const result = await login(username, password);
     
     if (result.success) {
       navigate('/');
@@ -100,13 +100,13 @@ const Login = () => {
               color: '#374151',
               marginBottom: '8px'
             }}>
-              Email Address
+              Username
             </label>
             <input
-              type="email"
+              type="text"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               style={{
                 width: '100%',
                 padding: '12px 16px',

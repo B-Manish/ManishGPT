@@ -29,20 +29,34 @@ function Chat({ isSidebarCollapsed }) {
     setLoading(true);
 
     try {
-      await userAPI.sendMessage(id, input);
+      const response = await userAPI.sendMessage(id, input);
       
-      // TODO: Get AI response from persona
-      // For now, add a placeholder response
-      const assistantMsg = {
-        role: "assistant",
-        content: "I received your message! The AI response will be implemented soon.",
-      };
-      
-      setMessages((prev) => [...prev, assistantMsg]);
+      // Get the AI response from the API response
+      if (response.ai_response && response.ai_response.content) {
+        const assistantMsg = {
+          role: "assistant",
+          content: response.ai_response.content,
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+      } else {
+        // Fallback if no AI response
+        const assistantMsg = {
+          role: "assistant",
+          content: "Sorry, I couldn't generate a response. Please try again.",
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+      }
     } catch (error) {
       console.error('Error sending message:', error);
       // Remove the user message if sending failed
       setMessages((prev) => prev.slice(0, -1));
+      
+      // Add error message
+      const errorMsg = {
+        role: "assistant",
+        content: "Sorry, there was an error processing your message. Please try again.",
+      };
+      setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setLoading(false);
     }

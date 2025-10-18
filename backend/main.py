@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field, EmailStr
-from agno.agent import Agent
+from agno.agent import Agent as AgnoAgent
 from agno.models.openai import OpenAIChat
 from agno.models.groq import Groq
 from dotenv import load_dotenv
@@ -27,10 +27,14 @@ from models import (
     Message, 
     ToolUsage, 
     AgentInteraction, 
-    ConversationAnalytics
+    ConversationAnalytics,
+    Agent,
+    AgentTool,
+    PersonaAgent
 )
 from typing import List
 from datetime import datetime
+from services.agno_team_service import agno_team_service
 
 
 
@@ -83,7 +87,7 @@ class UserCreate(BaseModel):
     role_id: int = Field(..., description="User role ID")
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    username: str
     password: str
 
 class UserResponse(BaseModel):
@@ -131,6 +135,45 @@ class UserDeactivate(BaseModel):
     user_id: int
     reason: Optional[str] = None
 
+# Agent Management Schemas
+class AgentCreate(BaseModel):
+    name: str = Field(..., description="Agent name")
+    role: str = Field(..., description="Agent role (team_leader, specialist, assistant)")
+    instructions: str = Field(..., description="Agent instructions")
+    model_provider: str = Field(default="openai", description="Model provider")
+    model_id: str = Field(default="gpt-4o", description="Model ID")
+    tool_names: Optional[List[str]] = Field(default=[], description="List of tool names")
+
+class AgentResponse(BaseModel):
+    id: int
+    name: str
+    role: str
+    instructions: str
+    model_provider: str
+    model_id: str
+    is_active: bool
+    created_at: datetime
+    tools: List[str] = Field(default=[], description="Tool names")
+
+class AgentListResponse(BaseModel):
+    agents: List[AgentResponse]
+    total: int
+
+class PersonaCreateRequest(BaseModel):
+    name: str = Field(..., description="Persona name")
+    description: Optional[str] = Field(default="", description="Persona description")
+    instructions: str = Field(..., description="Persona instructions")
+    model_provider: str = Field(default="openai", description="Model provider")
+    model_id: str = Field(..., description="Model ID")
+    agent_ids: List[int] = Field(..., description="List of agent IDs to attach")
+
+class PersonaTeamInfo(BaseModel):
+    persona_id: int
+    total_agents: int
+    team_leader: Optional[AgentResponse]
+    specialists: List[AgentResponse]
+    assistants: List[AgentResponse]
+
 Base.metadata.create_all(bind=engine)
 
 app.add_middleware(
@@ -152,7 +195,50 @@ from tools.registry import get_tools, TOOL_REGISTRY
 available_tools = get_tools(list(TOOL_REGISTRY.keys()))
 print(f"🔧 Loaded {len(available_tools)} tools: {[tool.name for tool in available_tools]}")
 
-agent = Agent(
+# Auto-create tools in database on startup
+def ensure_tools_exist():
+    """Ensure basic tools exist in database"""
+    db = SessionLocal()
+    try:
+        # Check if tools already exist
+        existing_tools = db.query(Tool).count()
+        if existing_tools > 0:
+            print(f"✅ Database tools already exist ({existing_tools} found)")
+            return
+        
+        # Create basic tools
+        tools_to_create = [
+            {
+                "name": "youtube",
+                "description": "YouTube video transcript extraction tool",
+                "tool_class": "YouTube_Tool",
+                "config": {"enabled": True}
+            },
+            {
+                "name": "web_search", 
+                "description": "Web search tool for finding information",
+                "tool_class": "WebSearchTool",
+                "config": {"enabled": True}
+            }
+        ]
+        
+        for tool_data in tools_to_create:
+            tool = Tool(**tool_data, is_active=True)
+            db.add(tool)
+        
+        db.commit()
+        print(f"✅ Created {len(tools_to_create)} tools in database")
+        
+    except Exception as e:
+        print(f"❌ Error creating tools: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+# Run on startup
+ensure_tools_exist()
+
+agent = AgnoAgent(
     name="Basic Agent",
     model=OpenAIChat(id="gpt-4o", api_key=openai_api_key),
     # model=Groq(id="llama-3.3-70b-versatile",api_key=groq_api_key),
@@ -354,12 +440,12 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
 @app.post("/auth/login", response_model=Token)
 def login_user(user_credentials: UserLogin, db: Session = Depends(get_db)):
     """Login user and return access token"""
-    user = db.query(User).filter(User.email == user_credentials.email).first()
+    user = db.query(User).filter(User.username == user_credentials.username).first()
     
     if not user or not verify_password(user_credentials.password, user.hashed_password):
         raise HTTPException(
             status_code=401,
-            detail="Incorrect email or password"
+            detail="Incorrect username or password"
         )
     
     if not user.is_active:
@@ -848,6 +934,7 @@ def send_message(
     # Create user message
     user_message = Message(
         conversation_id=conversation_id,
+        role="user",  # Set the role field
         content=content,
         sender_type="user",
         timestamp=datetime.utcnow()
@@ -857,9 +944,67 @@ def send_message(
     db.commit()
     db.refresh(user_message)
     
-    # TODO: Process message with persona and get AI response
-    # For now, return the user message
-    return user_message
+    # Process message with persona's team leader agent
+    try:
+        # Get conversation history for context
+        recent_messages = db.query(Message).filter(
+            Message.conversation_id == conversation_id
+        ).order_by(Message.timestamp.desc()).limit(10).all()
+        
+        # Convert to format expected by AgnoTeamService
+        conversation_history = []
+        for msg in reversed(recent_messages):  # Reverse to get chronological order
+            conversation_history.append({
+                "role": msg.role,
+                "content": msg.content
+            })
+        
+        # Process message with persona's team leader
+        ai_response = agno_team_service.process_message_with_persona(
+            db=db,
+            persona_id=conversation.persona_id,
+            message=content,
+            conversation_history=conversation_history[:-1]  # Exclude the current message
+        )
+        
+        # Create AI response message
+        ai_message = Message(
+            conversation_id=conversation_id,
+            role="assistant",
+            content=ai_response,
+            sender_type="persona",
+            agent_name="Team Leader",
+            timestamp=datetime.utcnow()
+        )
+        
+        db.add(ai_message)
+        db.commit()
+        db.refresh(ai_message)
+        
+        return {
+            "user_message": user_message,
+            "ai_response": ai_message
+        }
+        
+    except Exception as e:
+        # If agent processing fails, return user message with error
+        error_message = Message(
+            conversation_id=conversation_id,
+            role="assistant",
+            content=f"Sorry, I encountered an error: {str(e)}",
+            sender_type="system",
+            timestamp=datetime.utcnow()
+        )
+        
+        db.add(error_message)
+        db.commit()
+        db.refresh(error_message)
+        
+        return {
+            "user_message": user_message,
+            "ai_response": error_message,
+            "error": str(e)
+        }
 
 # =============================================================================
 # PERSONA MANAGEMENT ENDPOINTS
@@ -868,29 +1013,36 @@ def send_message(
 # Persona CRUD Operations
 @app.post("/admin/personas", response_model=dict)
 def create_persona(
-    persona_data: dict,
+    persona_data: PersonaCreateRequest,
     admin_user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new persona (Admin only)"""
-    # Validate required fields
-    required_fields = ["name", "instructions", "model_provider", "model_id"]
-    for field in required_fields:
-        if field not in persona_data:
-            raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+    """Create a new persona (Admin only) - REQUIRES existing agents to be selected"""
+    # Validate that agents are provided and not empty
+    if not persona_data.agent_ids or len(persona_data.agent_ids) == 0:
+        raise HTTPException(status_code=400, detail="At least one agent must be selected to create a persona")
     
     # Check if persona name already exists
-    existing_persona = db.query(Persona).filter(Persona.name == persona_data["name"]).first()
+    existing_persona = db.query(Persona).filter(Persona.name == persona_data.name).first()
     if existing_persona:
         raise HTTPException(status_code=400, detail="Persona name already exists")
     
+    # Validate that all agent IDs exist and are active
+    agents = db.query(Agent).filter(
+        Agent.id.in_(persona_data.agent_ids),
+        Agent.is_active == True
+    ).all()
+    
+    if len(agents) != len(persona_data.agent_ids):
+        raise HTTPException(status_code=400, detail="One or more selected agents do not exist or are inactive")
+    
     # Create persona
     persona = Persona(
-        name=persona_data["name"],
-        description=persona_data.get("description", ""),
-        instructions=persona_data["instructions"],
-        model_provider=persona_data["model_provider"],
-        model_id=persona_data["model_id"],
+        name=persona_data.name,
+        description=persona_data.description,
+        instructions=persona_data.instructions,
+        model_provider=persona_data.model_provider,
+        model_id=persona_data.model_id,
         created_by_admin_id=admin_user.id,
         is_active=True
     )
@@ -899,16 +1051,34 @@ def create_persona(
     db.commit()
     db.refresh(persona)
     
-    return {
-        "id": persona.id,
-        "name": persona.name,
-        "description": persona.description,
-        "instructions": persona.instructions,
-        "model_provider": persona.model_provider,
-        "model_id": persona.model_id,
-        "created_at": persona.created_at,
-        "message": "Persona created successfully"
-    }
+    # Attach selected agents to the persona
+    try:
+        for agent in agents:
+            persona_agent = PersonaAgent(
+                persona_id=persona.id,
+                agent_id=agent.id,
+                is_active=True
+            )
+            db.add(persona_agent)
+        
+        db.commit()
+        
+        return {
+            "id": persona.id,
+            "name": persona.name,
+            "description": persona.description,
+            "instructions": persona.instructions,
+            "model_provider": persona.model_provider,
+            "model_id": persona.model_id,
+            "created_at": persona.created_at,
+            "agents_attached": len(agents),
+            "message": f"Persona created successfully with {len(agents)} agent(s) attached"
+        }
+        
+    except Exception as e:
+        # If agent attachment fails, rollback persona creation
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to attach agents to persona: {str(e)}")
 
 @app.get("/admin/personas", response_model=List[dict])
 def get_all_personas(
@@ -1074,12 +1244,287 @@ def get_persona_users(
     
     return {"persona_id": persona_id, "persona_name": persona.name, "users": users}
 
+# =============================================================================
+# AGENT MANAGEMENT ENDPOINTS (Admin Only)
+# =============================================================================
 
+@app.post("/admin/agents", response_model=AgentResponse)
+def create_agent(
+    agent_data: AgentCreate,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Create a standalone agent (Admin only)"""
+    # Validate role
+    valid_roles = ["team_leader", "specialist", "assistant"]
+    if agent_data.role not in valid_roles:
+        raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {valid_roles}")
+    
+    # Create agent (standalone, no persona_id)
+    agent = Agent(
+        name=agent_data.name,
+        role=agent_data.role,
+        instructions=agent_data.instructions,
+        model_provider=agent_data.model_provider,
+        model_id=agent_data.model_id,
+        is_active=True
+    )
+    
+    db.add(agent)
+    db.commit()
+    db.refresh(agent)
+    
+    # Add tools if specified
+    if agent_data.tool_names:
+        agno_team_service.add_tools_to_agent(db, agent.id, agent_data.tool_names)
+    
+    # Get tool names for response
+    tool_names = []
+    for agent_tool in agent.agent_tools:
+        if agent_tool.is_active and agent_tool.tool.is_active:
+            tool_names.append(agent_tool.tool.name)
+    
+    return AgentResponse(
+        id=agent.id,
+        name=agent.name,
+        role=agent.role,
+        instructions=agent.instructions,
+        model_provider=agent.model_provider,
+        model_id=agent.model_id,
+        is_active=agent.is_active,
+        created_at=agent.created_at,
+        tools=tool_names
+    )
 
+@app.get("/admin/agents", response_model=AgentListResponse)
+def get_all_agents(
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get all agents (Admin only)"""
+    agents = db.query(Agent).filter(Agent.is_active == True).all()
+    
+    agent_responses = []
+    for agent in agents:
+        tool_names = []
+        for agent_tool in agent.agent_tools:
+            if agent_tool.is_active and agent_tool.tool.is_active:
+                tool_names.append(agent_tool.tool.name)
+        
+        agent_responses.append(AgentResponse(
+            id=agent.id,
+            name=agent.name,
+            role=agent.role,
+            instructions=agent.instructions,
+            model_provider=agent.model_provider,
+            model_id=agent.model_id,
+            is_active=agent.is_active,
+            created_at=agent.created_at,
+            tools=tool_names
+        ))
+    
+    return AgentListResponse(agents=agent_responses, total=len(agent_responses))
 
+@app.post("/admin/personas/{persona_id}/attach-agent/{agent_id}")
+def attach_agent_to_persona(
+    persona_id: int,
+    agent_id: int,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Attach an agent to a persona (Admin only)"""
+    # Check if persona exists
+    persona = db.query(Persona).filter(Persona.id == persona_id).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    
+    # Check if agent exists
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    # Check if agent is already attached to this persona
+    existing_attachment = db.query(PersonaAgent).filter(
+        PersonaAgent.persona_id == persona_id,
+        PersonaAgent.agent_id == agent_id,
+        PersonaAgent.is_active == True
+    ).first()
+    
+    if existing_attachment:
+        raise HTTPException(status_code=400, detail="Agent is already attached to this persona")
+    
+    # Create the attachment
+    persona_agent = PersonaAgent(
+        persona_id=persona_id,
+        agent_id=agent_id,
+        is_active=True
+    )
+    
+    db.add(persona_agent)
+    db.commit()
+    
+    return {"message": f"Agent '{agent.name}' attached to persona '{persona.name}' successfully"}
 
+@app.post("/admin/personas/{persona_id}/detach-agent/{agent_id}")
+def detach_agent_from_persona(
+    persona_id: int,
+    agent_id: int,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Detach an agent from a persona (Admin only)"""
+    # Check if persona exists
+    persona = db.query(Persona).filter(Persona.id == persona_id).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    
+    # Check if agent exists
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    # Find the attachment
+    persona_agent = db.query(PersonaAgent).filter(
+        PersonaAgent.persona_id == persona_id,
+        PersonaAgent.agent_id == agent_id,
+        PersonaAgent.is_active == True
+    ).first()
+    
+    if not persona_agent:
+        raise HTTPException(status_code=404, detail="Agent is not attached to this persona")
+    
+    # Soft delete the attachment
+    persona_agent.is_active = False
+    db.commit()
+    
+    return {"message": f"Agent '{agent.name}' detached from persona '{persona.name}' successfully"}
 
+@app.get("/admin/personas/{persona_id}/agents", response_model=AgentListResponse)
+def get_persona_agents(
+    persona_id: int,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get all agents for a persona (Admin only)"""
+    # Check if persona exists
+    persona = db.query(Persona).filter(Persona.id == persona_id).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    
+    # Get agents through the junction table
+    persona_agents = db.query(PersonaAgent).filter(
+        PersonaAgent.persona_id == persona_id,
+        PersonaAgent.is_active == True
+    ).all()
+    
+    agent_responses = []
+    for persona_agent in persona_agents:
+        agent = persona_agent.agent
+        tool_names = []
+        for agent_tool in agent.agent_tools:
+            if agent_tool.is_active and agent_tool.tool.is_active:
+                tool_names.append(agent_tool.tool.name)
+        
+        agent_responses.append(AgentResponse(
+            id=agent.id,
+            name=agent.name,
+            role=agent.role,
+            instructions=agent.instructions,
+            model_provider=agent.model_provider,
+            model_id=agent.model_id,
+            is_active=agent.is_active,
+            created_at=agent.created_at,
+            tools=tool_names
+        ))
+    
+    return AgentListResponse(agents=agent_responses, total=len(agent_responses))
 
+@app.get("/admin/personas/{persona_id}/team-info", response_model=PersonaTeamInfo)
+def get_persona_team_info(
+    persona_id: int,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get team information for a persona (Admin only)"""
+    team_info = agno_team_service.get_persona_team_info(db, persona_id)
+    return PersonaTeamInfo(**team_info)
+
+@app.delete("/admin/agents/{agent_id}")
+def delete_persona_agent(
+    agent_id: int,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Delete an agent (Admin only)"""
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    # Soft delete - mark as inactive
+    agent.is_active = False
+    agent.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return {"message": "Agent deleted successfully"}
+
+@app.post("/admin/personas/{persona_id}/create-agent")
+def create_default_agent(
+    persona_id: int,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Create a default agent for a persona (Admin only)"""
+    persona = db.query(Persona).filter(Persona.id == persona_id).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    
+    # Check if agent already exists
+    existing_agent = db.query(PersonaAgent).join(Agent).filter(
+        PersonaAgent.persona_id == persona_id,
+        Agent.is_active == True,
+        PersonaAgent.is_active == True
+    ).first()
+    
+    if existing_agent:
+        raise HTTPException(status_code=400, detail="Persona already has an agent")
+    
+    # Create default agent
+    agent = agno_team_service.create_agent_for_persona(
+        db=db,
+        persona=persona,
+        agent_name=f"{persona.name} Assistant",
+        agent_role="assistant",
+        instructions=f"You are an assistant for {persona.name}. {persona.instructions or 'Help users with their requests.'}",
+        tool_names=["youtube"]  # Default tools
+    )
+    
+    return {"message": "Agent created successfully", "agent_id": agent.id}
+
+# =============================================================================
+# TOOLS MANAGEMENT ENDPOINTS (Admin Only)
+# =============================================================================
+
+@app.get("/admin/tools")
+def get_all_tools(
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get all tools (Admin only)"""
+    tools = db.query(Tool).filter(Tool.is_active == True).all()
+    
+    tool_responses = []
+    for tool in tools:
+        tool_responses.append({
+            "id": tool.id,
+            "name": tool.name,
+            "description": tool.description,
+            "tool_class": tool.tool_class,
+            "config": tool.config,
+            "is_active": tool.is_active,
+            "created_at": tool.created_at
+        })
+    
+    return tool_responses
 
 
 
