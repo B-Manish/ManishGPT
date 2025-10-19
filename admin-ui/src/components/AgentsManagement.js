@@ -46,7 +46,12 @@ const AgentsManagement = () => {
   const handleCreateAgent = async (e) => {
     e.preventDefault();
     try {
-      await agentAPI.create(formData);
+      // Create agent with tools directly in the agent data
+      const agentData = {
+        ...formData,
+        tools: formData.tool_names // Map tool_names to tools for new structure
+      };
+      await agentAPI.create(agentData);
       setShowCreateForm(false);
       setFormData({
         name: '',

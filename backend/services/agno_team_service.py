@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 import os
 import json
 
-from models import Persona, Agent as AgentModel, Tool, AgentTool, PersonaAgent
+from models import Persona, Agent as AgentModel, Tool
 from tools.registry import get_tools
 
 load_dotenv("config.env")
@@ -33,12 +33,8 @@ class AgnoTeamService:
         else:
             raise ValueError(f"Unknown model_provider: {agent_model.model_provider}")
         
-        # Get tools for this agent
-        tool_names = []
-        for agent_tool in agent_model.agent_tools:
-            if agent_tool.is_active and agent_tool.tool.is_active:
-                tool_names.append(agent_tool.tool.name)
-        
+        # Get tools for this agent from JSON column
+        tool_names = agent_model.tools or []
         tools = get_tools(tool_names)
         
         # Create Agno Agent
@@ -53,30 +49,40 @@ class AgnoTeamService:
     
     def get_persona_team_leader(self, db: Session, persona_id: int) -> Optional[AgnoAgent]:
         """Get any active agent for a persona (previously called team leader)"""
-        # Get any active agent through junction table
-        persona_agent = db.query(PersonaAgent).join(AgentModel).filter(
-            PersonaAgent.persona_id == persona_id,
-            PersonaAgent.is_active == True,
-            AgentModel.is_active == True
-        ).first()
-        
-        if not persona_agent:
+        # Get persona
+        persona = db.query(Persona).filter(Persona.id == persona_id).first()
+        if not persona or not persona.agents:
             return None
         
-        return self.create_agent_from_model(persona_agent.agent)
+        # Get first active agent from the agents list
+        agent_ids = persona.agents
+        for agent_id in agent_ids:
+            agent_model = db.query(AgentModel).filter(
+                AgentModel.id == agent_id,
+                AgentModel.is_active == True
+            ).first()
+            
+            if agent_model:
+                return self.create_agent_from_model(agent_model)
+        
+        return None
     
     def get_persona_agents(self, db: Session, persona_id: int) -> List[AgnoAgent]:
         """Get all active agents for a persona"""
-        # Get agents through the junction table
-        persona_agents = db.query(PersonaAgent).filter(
-            PersonaAgent.persona_id == persona_id,
-            PersonaAgent.is_active == True
-        ).all()
+        # Get persona
+        persona = db.query(Persona).filter(Persona.id == persona_id).first()
+        if not persona or not persona.agents:
+            return []
         
         agents = []
-        for persona_agent in persona_agents:
-            agent_model = persona_agent.agent
-            if agent_model.is_active:
+        agent_ids = persona.agents
+        for agent_id in agent_ids:
+            agent_model = db.query(AgentModel).filter(
+                AgentModel.id == agent_id,
+                AgentModel.is_active == True
+            ).first()
+            
+            if agent_model:
                 try:
                     agent = self.create_agent_from_model(agent_model)
                     agents.append(agent)
@@ -114,35 +120,28 @@ class AgnoTeamService:
         db.commit()
         db.refresh(agent_model)
         
-        # Attach agent to persona through junction table
-        persona_agent = PersonaAgent(
-            persona_id=persona.id,
-            agent_id=agent_model.id,
-            is_active=True
-        )
-        
-        db.add(persona_agent)
+        # Add agent to persona's agents list
+        if persona.agents is None:
+            persona.agents = []
+        persona.agents.append(agent_model.id)
         db.commit()
         
         # Add tools if specified
         if tool_names:
-            self.add_tools_to_agent(db, agent_model.id, tool_names)
+            agent_model.tools = tool_names
+            db.commit()
         
         return agent_model
     
     def add_tools_to_agent(self, db: Session, agent_id: int, tool_names: List[str]):
         """Add tools to an agent"""
-        for tool_name in tool_names:
-            tool = db.query(Tool).filter(Tool.name == tool_name).first()
-            if tool:
-                agent_tool = AgentTool(
-                    agent_id=agent_id,
-                    tool_id=tool.id,
-                    is_active=True
-                )
-                db.add(agent_tool)
-        
-        db.commit()
+        agent = db.query(AgentModel).filter(AgentModel.id == agent_id).first()
+        if agent:
+            if agent.tools is None:
+                agent.tools = []
+            agent.tools.extend(tool_names)
+            agent.tools = list(set(agent.tools))  # Remove duplicates
+            db.commit()
     
     def process_message_with_persona(
         self, 
@@ -173,8 +172,18 @@ class AgnoTeamService:
     
     def get_persona_team_info(self, db: Session, persona_id: int) -> Dict[str, Any]:
         """Get information about a persona's team"""
+        persona = db.query(Persona).filter(Persona.id == persona_id).first()
+        if not persona or not persona.agents:
+            return {
+                "persona_id": persona_id,
+                "total_agents": 0,
+                "team_leader": None,
+                "specialists": [],
+                "assistants": []
+            }
+        
         agents = db.query(AgentModel).filter(
-            AgentModel.persona_id == persona_id,
+            AgentModel.id.in_(persona.agents),
             AgentModel.is_active == True
         ).all()
         
@@ -193,7 +202,7 @@ class AgnoTeamService:
                 "role": agent.role,
                 "model_provider": agent.model_provider,
                 "model_id": agent.model_id,
-                "tools": [at.tool.name for at in agent.agent_tools if at.is_active]
+                "tools": agent.tools or []
             }
             
             if agent.role == "team_leader":

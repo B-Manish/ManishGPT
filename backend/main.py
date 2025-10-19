@@ -25,15 +25,12 @@ from models import (
     Persona, 
     UserPersona, 
     Tool, 
-    PersonaTool,
     Conversation, 
     Message, 
     ToolUsage, 
     AgentInteraction, 
     ConversationAnalytics,
-    Agent,
-    AgentTool,
-    PersonaAgent
+    Agent
 )
 from typing import List
 from datetime import datetime
@@ -1081,7 +1078,7 @@ async def send_message_stream(
                 yield f"data: {json.dumps({'type': 'chunk', 'data': chunk})}\n\n"
                 
                 # Small delay to simulate streaming
-                await asyncio.sleep(0.03)  # Faster for letter-by-letter
+                await asyncio.sleep(0.01)  # Much faster for letter-by-letter
             
             # Create final AI message
             ai_message = Message(
@@ -1144,13 +1141,14 @@ def create_persona(
     if len(agents) != len(persona_data.agent_ids):
         raise HTTPException(status_code=400, detail="One or more selected agents do not exist or are inactive")
     
-    # Create persona
+    # Create persona with agents directly
     persona = Persona(
         name=persona_data.name,
         description=persona_data.description,
         instructions=persona_data.instructions,
         model_provider=persona_data.model_provider,
         model_id=persona_data.model_id,
+        agents=persona_data.agent_ids,  # Store agent IDs directly
         created_by_admin_id=admin_user.id,
         is_active=True
     )
@@ -1159,34 +1157,17 @@ def create_persona(
     db.commit()
     db.refresh(persona)
     
-    # Attach selected agents to the persona
-    try:
-        for agent in agents:
-            persona_agent = PersonaAgent(
-                persona_id=persona.id,
-                agent_id=agent.id,
-                is_active=True
-            )
-            db.add(persona_agent)
-        
-        db.commit()
-        
-        return {
-            "id": persona.id,
-            "name": persona.name,
-            "description": persona.description,
-            "instructions": persona.instructions,
-            "model_provider": persona.model_provider,
-            "model_id": persona.model_id,
-            "created_at": persona.created_at,
-            "agents_attached": len(agents),
-            "message": f"Persona created successfully with {len(agents)} agent(s) attached"
-        }
-        
-    except Exception as e:
-        # If agent attachment fails, rollback persona creation
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to attach agents to persona: {str(e)}")
+    return {
+        "id": persona.id,
+        "name": persona.name,
+        "description": persona.description,
+        "instructions": persona.instructions,
+        "model_provider": persona.model_provider,
+        "model_id": persona.model_id,
+        "created_at": persona.created_at,
+        "agents_attached": len(persona_data.agent_ids),
+        "message": f"Persona '{persona.name}' created successfully with {len(persona_data.agent_ids)} agents"
+    }
 
 @app.get("/admin/personas", response_model=List[dict])
 def get_all_personas(
@@ -1206,6 +1187,7 @@ def get_all_personas(
             "instructions": persona.instructions,
             "model_provider": persona.model_provider,
             "model_id": persona.model_id,
+            "agents": persona.agents or [],  # Include agents field
             "is_active": persona.is_active,
             "created_at": persona.created_at,
             "created_by": persona.created_by_admin.email if persona.created_by_admin else None
@@ -1231,6 +1213,7 @@ def get_persona_by_id(
         "instructions": persona.instructions,
         "model_provider": persona.model_provider,
         "model_id": persona.model_id,
+        "agents": persona.agents or [],  # Include agents field
         "is_active": persona.is_active,
         "created_at": persona.created_at,
         "created_by": persona.created_by_admin.email if persona.created_by_admin else None
@@ -1270,6 +1253,9 @@ def update_persona(
     
     if "model_id" in persona_data:
         persona.model_id = persona_data["model_id"]
+    
+    if "agents" in persona_data:
+        persona.agents = persona_data["agents"]
     
     persona.updated_at = datetime.utcnow()
     db.commit()
@@ -1387,10 +1373,7 @@ def create_agent(
         agno_team_service.add_tools_to_agent(db, agent.id, agent_data.tool_names)
     
     # Get tool names for response
-    tool_names = []
-    for agent_tool in agent.agent_tools:
-        if agent_tool.is_active and agent_tool.tool.is_active:
-            tool_names.append(agent_tool.tool.name)
+    tool_names = agent.tools or []
     
     return AgentResponse(
         id=agent.id,
@@ -1414,10 +1397,7 @@ def get_all_agents(
     
     agent_responses = []
     for agent in agents:
-        tool_names = []
-        for agent_tool in agent.agent_tools:
-            if agent_tool.is_active and agent_tool.tool.is_active:
-                tool_names.append(agent_tool.tool.name)
+        tool_names = agent.tools or []
         
         agent_responses.append(AgentResponse(
             id=agent.id,
@@ -1452,23 +1432,13 @@ def attach_agent_to_persona(
         raise HTTPException(status_code=404, detail="Agent not found")
     
     # Check if agent is already attached to this persona
-    existing_attachment = db.query(PersonaAgent).filter(
-        PersonaAgent.persona_id == persona_id,
-        PersonaAgent.agent_id == agent_id,
-        PersonaAgent.is_active == True
-    ).first()
-    
-    if existing_attachment:
+    current_agents = persona.agents or []
+    if agent_id in current_agents:
         raise HTTPException(status_code=400, detail="Agent is already attached to this persona")
     
-    # Create the attachment
-    persona_agent = PersonaAgent(
-        persona_id=persona_id,
-        agent_id=agent_id,
-        is_active=True
-    )
-    
-    db.add(persona_agent)
+    # Add agent to persona's agents list
+    updated_agents = current_agents + [agent_id]
+    persona.agents = updated_agents
     db.commit()
     
     return {"message": f"Agent '{agent.name}' attached to persona '{persona.name}' successfully"}
@@ -1491,18 +1461,14 @@ def detach_agent_from_persona(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     
-    # Find the attachment
-    persona_agent = db.query(PersonaAgent).filter(
-        PersonaAgent.persona_id == persona_id,
-        PersonaAgent.agent_id == agent_id,
-        PersonaAgent.is_active == True
-    ).first()
-    
-    if not persona_agent:
+    # Check if agent is attached to this persona
+    current_agents = persona.agents or []
+    if agent_id not in current_agents:
         raise HTTPException(status_code=404, detail="Agent is not attached to this persona")
     
-    # Soft delete the attachment
-    persona_agent.is_active = False
+    # Remove agent from persona's agents list
+    updated_agents = [id for id in current_agents if id != agent_id]
+    persona.agents = updated_agents
     db.commit()
     
     return {"message": f"Agent '{agent.name}' detached from persona '{persona.name}' successfully"}
@@ -1519,19 +1485,16 @@ def get_persona_agents(
     if not persona:
         raise HTTPException(status_code=404, detail="Persona not found")
     
-    # Get agents through the junction table
-    persona_agents = db.query(PersonaAgent).filter(
-        PersonaAgent.persona_id == persona_id,
-        PersonaAgent.is_active == True
+    # Get agents from persona's agents list
+    agent_ids = persona.agents or []
+    agents = db.query(Agent).filter(
+        Agent.id.in_(agent_ids),
+        Agent.is_active == True
     ).all()
     
     agent_responses = []
-    for persona_agent in persona_agents:
-        agent = persona_agent.agent
-        tool_names = []
-        for agent_tool in agent.agent_tools:
-            if agent_tool.is_active and agent_tool.tool.is_active:
-                tool_names.append(agent_tool.tool.name)
+    for agent in agents:
+        tool_names = agent.tools or []
         
         agent_responses.append(AgentResponse(
             id=agent.id,
@@ -1586,15 +1549,9 @@ def create_default_agent(
     if not persona:
         raise HTTPException(status_code=404, detail="Persona not found")
     
-    # Check if agent already exists
-    existing_agent = db.query(PersonaAgent).join(Agent).filter(
-        PersonaAgent.persona_id == persona_id,
-        Agent.is_active == True,
-        PersonaAgent.is_active == True
-    ).first()
-    
-    if existing_agent:
-        raise HTTPException(status_code=400, detail="Persona already has an agent")
+    # Check if persona already has agents
+    if persona.agents and len(persona.agents) > 0:
+        raise HTTPException(status_code=400, detail="Persona already has agents")
     
     # Create default agent
     agent = agno_team_service.create_agent_for_persona(

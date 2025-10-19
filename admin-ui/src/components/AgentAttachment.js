@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { agentAPI } from '../services/api';
+import { agentAPI, personaAPI } from '../services/api';
 
 const AgentAttachment = ({ persona, onPersonaUpdate }) => {
   const [availableAgents, setAvailableAgents] = useState([]);
@@ -14,18 +14,15 @@ const AgentAttachment = ({ persona, onPersonaUpdate }) => {
   const loadAgents = async () => {
     try {
       setLoading(true);
-      const [allAgentsData, attachedAgentsData] = await Promise.all([
-        agentAPI.getAll(),
-        agentAPI.getByPersona(persona.id)
-      ]);
+      const allAgentsData = await agentAPI.getAll();
       
-      // Filter available agents (not attached to any persona)
-      const attachedAgentIds = (attachedAgentsData || []).map(agent => agent.id);
-      const available = (allAgentsData || []).filter(agent => !attachedAgentIds.includes(agent.id));
+      // Get attached agents from persona.agents
+      const attachedAgentIds = persona.agents || [];
+      const attached = allAgentsData.filter(agent => attachedAgentIds.includes(agent.id));
+      const available = allAgentsData.filter(agent => !attachedAgentIds.includes(agent.id));
+      
       setAvailableAgents(available);
-      
-      // Get attached agents
-      setAttachedAgents(attachedAgentsData || []);
+      setAttachedAgents(attached);
       setError('');
     } catch (err) {
       setError('Failed to load agents');
@@ -37,7 +34,16 @@ const AgentAttachment = ({ persona, onPersonaUpdate }) => {
 
   const handleAttachAgent = async (agentId) => {
     try {
-      await agentAPI.attachToPersona(persona.id, agentId);
+      // Add agent to persona's agents list
+      const currentAgents = persona.agents || [];
+      const updatedAgents = [...currentAgents, agentId];
+      
+      await personaAPI.update(persona.id, { agents: updatedAgents });
+      
+      // Update local state
+      const updatedPersona = { ...persona, agents: updatedAgents };
+      onPersonaUpdate(updatedPersona);
+      
       loadAgents(); // Reload to update lists
     } catch (err) {
       setError('Failed to attach agent');
@@ -47,7 +53,16 @@ const AgentAttachment = ({ persona, onPersonaUpdate }) => {
 
   const handleDetachAgent = async (agentId) => {
     try {
-      await agentAPI.detachFromPersona(persona.id, agentId);
+      // Remove agent from persona's agents list
+      const currentAgents = persona.agents || [];
+      const updatedAgents = currentAgents.filter(id => id !== agentId);
+      
+      await personaAPI.update(persona.id, { agents: updatedAgents });
+      
+      // Update local state
+      const updatedPersona = { ...persona, agents: updatedAgents };
+      onPersonaUpdate(updatedPersona);
+      
       loadAgents(); // Reload to update lists
     } catch (err) {
       setError('Failed to detach agent');

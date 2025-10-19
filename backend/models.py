@@ -40,38 +40,36 @@ class Agent(Base):
     instructions = Column(Text, nullable=False)
     model_provider = Column(String, default="openai")  # openai, groq, etc.
     model_id = Column(String, default="gpt-4o")
+    tools = Column(JSON)  # List of tool names directly in agent
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
-    agent_tools = relationship("AgentTool", back_populates="agent")
-    persona_agents = relationship("PersonaAgent", back_populates="agent")
 
-class AgentTool(Base):
-    __tablename__ = "agent_tools"
-    id = Column(Integer, primary_key=True, index=True)
-    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False)
-    tool_id = Column(Integer, ForeignKey("tools.id"), nullable=False)
-    is_active = Column(Boolean, default=True)
-    added_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    agent = relationship("Agent", back_populates="agent_tools")
-    tool = relationship("Tool", back_populates="agent_tools")
+# Junction tables removed - using JSON columns instead
+# class AgentTool(Base):
+#     __tablename__ = "agent_tools"
+#     id = Column(Integer, primary_key=True, index=True)
+#     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False)
+#     tool_id = Column(Integer, ForeignKey("tools.id"), nullable=False)
+#     is_active = Column(Boolean, default=True)
+#     added_at = Column(DateTime, default=datetime.utcnow)
+#     
+#     # Relationships
+#     agent = relationship("Agent", back_populates="agent_tools")
+#     tool = relationship("Tool", back_populates="agent_tools")
 
 # Junction table for Persona-Agent relationships
-class PersonaAgent(Base):
-    __tablename__ = "persona_agents"
-    id = Column(Integer, primary_key=True, index=True)
-    persona_id = Column(Integer, ForeignKey("personas.id"), nullable=False)
-    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False)
-    is_active = Column(Boolean, default=True)
-    attached_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    persona = relationship("Persona", back_populates="persona_agents")
-    agent = relationship("Agent", back_populates="persona_agents")
+# class PersonaAgent(Base):
+#     __tablename__ = "persona_agents"
+#     id = Column(Integer, primary_key=True, index=True)
+#     persona_id = Column(Integer, ForeignKey("personas.id"), nullable=False)
+#     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False)
+#     is_active = Column(Boolean, default=True)
+#     attached_at = Column(DateTime, default=datetime.utcnow)
+#     
+#     # Relationships
+#     persona = relationship("Persona", back_populates="persona_agents")
+#     agent = relationship("Agent", back_populates="persona_agents")
 
 # Persona Management Models
 class Persona(Base):
@@ -83,6 +81,7 @@ class Persona(Base):
     agno_team_config = Column(JSON)  # Configuration for Agno Team
     model_provider = Column(String, default="openai")  # openai, groq, etc.
     model_id = Column(String, default="gpt-4o")
+    agents = Column(JSON)  # List of agent IDs directly in persona
     is_active = Column(Boolean, default=True)
     created_by_admin_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -92,8 +91,6 @@ class Persona(Base):
     created_by_admin = relationship("User", foreign_keys=[created_by_admin_id])
     assigned_users = relationship("UserPersona", back_populates="persona", foreign_keys="UserPersona.persona_id")
     conversations = relationship("Conversation", back_populates="persona", foreign_keys="Conversation.persona_id")
-    tools = relationship("PersonaTool", back_populates="persona", foreign_keys="PersonaTool.persona_id")
-    persona_agents = relationship("PersonaAgent", back_populates="persona")
 
 # Many-to-many relationship between Users and Personas
 class UserPersona(Base):
@@ -122,20 +119,20 @@ class Tool(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
-    persona_tools = relationship("PersonaTool", back_populates="tool")
-    agent_tools = relationship("AgentTool", back_populates="tool")
+    # persona_tools relationship removed - personas get tools through agents
 
-class PersonaTool(Base):
-    __tablename__ = "persona_tools"
-    id = Column(Integer, primary_key=True, index=True)
-    persona_id = Column(Integer, ForeignKey("personas.id"), nullable=False)
-    tool_id = Column(Integer, ForeignKey("tools.id"), nullable=False)
-    is_active = Column(Boolean, default=True)
-    added_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    persona = relationship("Persona", back_populates="tools")
-    tool = relationship("Tool", back_populates="persona_tools")
+# PersonaTool junction table removed - personas get tools through their agents
+# class PersonaTool(Base):
+#     __tablename__ = "persona_tools"
+#     id = Column(Integer, primary_key=True, index=True)
+#     persona_id = Column(Integer, ForeignKey("personas.id"), nullable=False)
+#     tool_id = Column(Integer, ForeignKey("tools.id"), nullable=False)
+#     is_active = Column(Boolean, default=True)
+#     added_at = Column(DateTime, default=datetime.utcnow)
+#     
+#     # Relationships
+#     persona = relationship("Persona", back_populates="tools")
+#     tool = relationship("Tool", back_populates="persona_tools")
 
 # Enhanced Conversation and Message Models
 class Conversation(Base):

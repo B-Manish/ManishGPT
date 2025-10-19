@@ -22,7 +22,7 @@ const PersonaForm = ({ persona, onSubmit, onClose }) => {
         instructions: persona.instructions || '',
         model_provider: persona.model_provider || 'openai',
         model_id: persona.model_id || 'gpt-4o',
-        agent_ids: []
+        agent_ids: persona.agents || [] // Use agents from persona for new structure
       });
     }
     loadAgents();
@@ -81,8 +81,14 @@ const PersonaForm = ({ persona, onSubmit, onClose }) => {
 
     setLoading(true);
     try {
-      console.log('Calling onSubmit with:', persona?.id, formData);
-      await onSubmit(persona?.id, formData);
+      // Map agent_ids to agents for new structure
+      const personaData = {
+        ...formData,
+        agents: formData.agent_ids // Send as agents instead of agent_ids
+      };
+      
+      console.log('Calling onSubmit with:', persona?.id, personaData);
+      await onSubmit(persona?.id, personaData);
       console.log('Persona creation successful');
     } catch (error) {
       console.error('Error submitting form:', error);
