@@ -910,6 +910,16 @@ def get_conversation_messages(
     
     return messages
 
+# Conversation locks to ensure sequential processing
+conversation_locks = {}
+import threading
+
+def get_conversation_lock(conversation_id: int):
+    """Get or create a lock for a specific conversation"""
+    if conversation_id not in conversation_locks:
+        conversation_locks[conversation_id] = threading.Lock()
+    return conversation_locks[conversation_id]
+
 @app.post("/user/conversations/{conversation_id}/messages")
 def send_message(
     conversation_id: int,
@@ -918,93 +928,97 @@ def send_message(
     db: Session = Depends(get_db)
 ):
     """Send a message in a conversation"""
-    # Verify conversation belongs to user
-    conversation = db.query(Conversation).filter(
-        Conversation.id == conversation_id,
-        Conversation.user_id == current_user.id
-    ).first()
+    # Get conversation lock to ensure sequential processing
+    conversation_lock = get_conversation_lock(conversation_id)
     
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    
-    content = message_data.get("content")
-    if not content:
-        raise HTTPException(status_code=400, detail="content is required")
-    
-    # Create user message
-    user_message = Message(
-        conversation_id=conversation_id,
-        role="user",  # Set the role field
-        content=content,
-        sender_type="user",
-        timestamp=datetime.utcnow()
-    )
-    
-    db.add(user_message)
-    db.commit()
-    db.refresh(user_message)
-    
-    # Process message with persona's team leader agent
-    try:
-        # Get conversation history for context
-        recent_messages = db.query(Message).filter(
-            Message.conversation_id == conversation_id
-        ).order_by(Message.timestamp.desc()).limit(10).all()
+    with conversation_lock:
+        # Verify conversation belongs to user
+        conversation = db.query(Conversation).filter(
+            Conversation.id == conversation_id,
+            Conversation.user_id == current_user.id
+        ).first()
         
-        # Convert to format expected by AgnoTeamService
-        conversation_history = []
-        for msg in reversed(recent_messages):  # Reverse to get chronological order
-            conversation_history.append({
-                "role": msg.role,
-                "content": msg.content
-            })
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
         
-        # Process message with persona's team leader
-        ai_response = agno_team_service.process_message_with_persona(
-            db=db,
-            persona_id=conversation.persona_id,
-            message=content,
-            conversation_history=conversation_history[:-1]  # Exclude the current message
-        )
+        content = message_data.get("content")
+        if not content:
+            raise HTTPException(status_code=400, detail="content is required")
         
-        # Create AI response message
-        ai_message = Message(
+        # Create user message
+        user_message = Message(
             conversation_id=conversation_id,
-            role="assistant",
-            content=ai_response,
-            sender_type="persona",
-            agent_name="Team Leader",
+            role="user",  # Set the role field
+            content=content,
+            sender_type="user",
             timestamp=datetime.utcnow()
         )
         
-        db.add(ai_message)
+        db.add(user_message)
         db.commit()
-        db.refresh(ai_message)
+        db.refresh(user_message)
         
-        return {
-            "user_message": user_message,
-            "ai_response": ai_message
-        }
+        # Process message with persona's team leader agent
+        try:
+            # Get conversation history for context
+            recent_messages = db.query(Message).filter(
+                Message.conversation_id == conversation_id
+            ).order_by(Message.timestamp.desc()).limit(10).all()
+            
+            # Convert to format expected by AgnoTeamService
+            conversation_history = []
+            for msg in reversed(recent_messages):  # Reverse to get chronological order
+                conversation_history.append({
+                    "role": msg.role,
+                    "content": msg.content
+                })
+            
+            # Process message with persona's team leader
+            ai_response = agno_team_service.process_message_with_persona(
+                db=db,
+                persona_id=conversation.persona_id,
+                message=content,
+                conversation_history=conversation_history[:-1]  # Exclude the current message
+            )
+            
+            # Create AI response message
+            ai_message = Message(
+                conversation_id=conversation_id,
+                role="assistant",
+                content=ai_response,
+                sender_type="persona",
+                agent_name="Team Leader",
+                timestamp=datetime.utcnow()
+            )
+            
+            db.add(ai_message)
+            db.commit()
+            db.refresh(ai_message)
+            
+            return {
+                "user_message": user_message,
+                "ai_response": ai_message
+            }
         
-    except Exception as e:
-        # If agent processing fails, return user message with error
-        error_message = Message(
-            conversation_id=conversation_id,
-            role="assistant",
-            content=f"Sorry, I encountered an error: {str(e)}",
-            sender_type="system",
-            timestamp=datetime.utcnow()
-        )
-        
-        db.add(error_message)
-        db.commit()
-        db.refresh(error_message)
-        
-        return {
-            "user_message": user_message,
-            "ai_response": error_message,
-            "error": str(e)
-        }
+        except Exception as e:
+            # If agent processing fails, return user message with error
+            error_message = Message(
+                conversation_id=conversation_id,
+                role="assistant",
+                content=f"Sorry, I encountered an error: {str(e)}",
+                sender_type="system",
+                timestamp=datetime.utcnow()
+            )
+            
+            db.add(error_message)
+            db.commit()
+            db.refresh(error_message)
+            
+            return {
+                "user_message": user_message,
+                "ai_response": error_message,
+                "error": str(e)
+            }
 
 @app.post("/user/conversations/{conversation_id}/messages/stream")
 async def send_message_stream(
@@ -1014,37 +1028,38 @@ async def send_message_stream(
     db: Session = Depends(get_db)
 ):
     """Send a message in a conversation with streaming response"""
-    # Verify conversation belongs to user
-    conversation = db.query(Conversation).filter(
-        Conversation.id == conversation_id,
-        Conversation.user_id == current_user.id
-    ).first()
+    # Get conversation lock to ensure sequential processing
+    conversation_lock = get_conversation_lock(conversation_id)
     
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    
-    content = message_data.get("content")
-    if not content:
-        raise HTTPException(status_code=400, detail="content is required")
-    
-    # Create user message
-    user_message = Message(
-        conversation_id=conversation_id,
-        role="user",
-        content=content,
-        sender_type="user",
-        timestamp=datetime.utcnow()
-    )
-    
-    db.add(user_message)
-    db.commit()
-    db.refresh(user_message)
-    
-    async def generate_stream():
+    with conversation_lock:
+        # Verify conversation belongs to user
+        conversation = db.query(Conversation).filter(
+            Conversation.id == conversation_id,
+            Conversation.user_id == current_user.id
+        ).first()
+        
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        content = message_data.get("content")
+        if not content:
+            raise HTTPException(status_code=400, detail="content is required")
+        
+        # Create user message
+        user_message = Message(
+            conversation_id=conversation_id,
+            role="user",
+            content=content,
+            sender_type="user",
+            timestamp=datetime.utcnow()
+        )
+        
+        db.add(user_message)
+        db.commit()
+        db.refresh(user_message)
+        
+        # Process AI response inside the lock
         try:
-            # Send user message first
-            yield f"data: {json.dumps({'type': 'user_message', 'data': {'id': user_message.id, 'content': user_message.content, 'role': user_message.role}})}\n\n"
-            
             # Get conversation history for context
             recent_messages = db.query(Message).filter(
                 Message.conversation_id == conversation_id
@@ -1066,6 +1081,40 @@ async def send_message_stream(
                 conversation_history=conversation_history[:-1]
             )
             
+            # Create AI message
+            ai_message = Message(
+                conversation_id=conversation_id,
+                role="assistant",
+                content=ai_response,
+                sender_type="persona",
+                agent_name="Team Leader",
+                timestamp=datetime.utcnow()
+            )
+            
+            db.add(ai_message)
+            db.commit()
+            db.refresh(ai_message)
+            
+        except Exception as e:
+            # Create error message
+            ai_message = Message(
+                conversation_id=conversation_id,
+                role="assistant",
+                content=f"Sorry, I encountered an error: {str(e)}",
+                sender_type="system",
+                timestamp=datetime.utcnow()
+            )
+            
+            db.add(ai_message)
+            db.commit()
+            db.refresh(ai_message)
+            ai_response = ai_message.content
+    
+    async def generate_stream():
+        try:
+            # Send user message first
+            yield f"data: {json.dumps({'type': 'user_message', 'data': {'id': user_message.id, 'content': user_message.content, 'role': user_message.role}})}\n\n"
+            
             # Simulate streaming by breaking response into character chunks
             chunk_size = 1  # One character per chunk for letter-by-letter streaming
             full_response = ""
@@ -1080,22 +1129,8 @@ async def send_message_stream(
                 # Small delay to simulate streaming
                 await asyncio.sleep(0.01)  # Much faster for letter-by-letter
             
-            # Create final AI message
-            ai_message = Message(
-                conversation_id=conversation_id,
-                role="assistant",
-                content=full_response,
-                sender_type="persona",
-                agent_name="Team Leader",
-                timestamp=datetime.utcnow()
-            )
-            
-            db.add(ai_message)
-            db.commit()
-            db.refresh(ai_message)
-            
             # Send completion signal
-            yield f"data: {json.dumps({'type': 'complete', 'data': {'id': ai_message.id, 'content': full_response, 'role': ai_message.role}})}\n\n"
+            yield f"data: {json.dumps({'type': 'complete', 'data': {'id': ai_message.id, 'content': ai_response, 'role': ai_message.role}})}\n\n"
             
         except Exception as e:
             # Send error
