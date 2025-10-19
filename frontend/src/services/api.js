@@ -78,6 +78,68 @@ export const userAPI = {
     return response.data;
   },
   
+  sendMessageStream: async (conversationId, message, onChunk, onComplete, onError) => {
+    const token = localStorage.getItem('userToken');
+    
+    try {
+      const response = await fetch(`http://localhost:8000/user/conversations/${conversationId}/messages/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ content: message }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Process complete lines
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // Keep incomplete line in buffer
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              switch (data.type) {
+                case 'user_message':
+                  // User message sent
+                  break;
+                case 'chunk':
+                  onChunk(data.data);
+                  break;
+                case 'complete':
+                  onComplete(data.data);
+                  break;
+                case 'error':
+                  onError(data.data);
+                  break;
+              }
+            } catch (e) {
+              console.error('Error parsing SSE data:', e);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      onError(error.message);
+    }
+  },
+  
   getMessages: async (conversationId) => {
     const response = await api.get(`/user/conversations/${conversationId}/messages`);
     return response.data;

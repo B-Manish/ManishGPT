@@ -433,6 +433,7 @@ function Sidebar({ isCollapsed, onToggle }) {
         overflowY: "auto",
         overflowX: "hidden",
         paddingRight: "5px",
+        minHeight: 0, // Ensures flex item can shrink below content size
       }}>
         {conversations.map((c, index) => (
           <div
@@ -577,7 +578,9 @@ function Sidebar({ isCollapsed, onToggle }) {
       <div style={{
         marginTop: "auto",
         paddingTop: "20px",
-        borderTop: "1px solid #40414f"
+        paddingBottom: "20px",
+        borderTop: "1px solid #40414f",
+        flexShrink: 0,
       }}>
         <button
           onClick={logout}

@@ -47,6 +47,8 @@ class AgnoTeamService:
             model=model,
             tools=tools,
             instructions=[agent_model.instructions],
+            debug_mode=True,
+            debug_level=2,
         )
     
     def get_persona_team_leader(self, db: Session, persona_id: int) -> Optional[AgnoAgent]:

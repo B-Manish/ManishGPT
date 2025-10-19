@@ -12,11 +12,6 @@ Run the interactive script to create a custom admin user:
 # Using Python directly
 uv run python create_admin.py
 
-# Or using the batch file (Windows)
-create_admin.bat
-
-# Or using PowerShell (Windows)
-./create_admin.ps1
 ```
 
 The script will prompt you for:

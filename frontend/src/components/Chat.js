@@ -28,28 +28,68 @@ function Chat({ isSidebarCollapsed }) {
     setInput("");
     setLoading(true);
 
+    // Add a placeholder for the streaming response
+    const assistantMsg = { role: "assistant", content: "", isStreaming: true };
+    setMessages((prev) => [...prev, assistantMsg]);
+
     try {
-      const response = await userAPI.sendMessage(id, input);
-      
-      // Get the AI response from the API response
-      if (response.ai_response && response.ai_response.content) {
-        const assistantMsg = {
-          role: "assistant",
-          content: response.ai_response.content,
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
-      } else {
-        // Fallback if no AI response
-        const assistantMsg = {
-          role: "assistant",
-          content: "Sorry, I couldn't generate a response. Please try again.",
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
-      }
+      await userAPI.sendMessageStream(
+        id,
+        input,
+        // onChunk - called for each chunk
+        (chunk) => {
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            const lastMessage = newMessages[newMessages.length - 1];
+            if (lastMessage && lastMessage.role === "assistant" && lastMessage.isStreaming) {
+              // Create a new message object instead of mutating
+              newMessages[newMessages.length - 1] = {
+                ...lastMessage,
+                content: lastMessage.content + chunk
+              };
+            }
+            return newMessages;
+          });
+        },
+        // onComplete - called when streaming is done
+        (finalData) => {
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            const lastMessage = newMessages[newMessages.length - 1];
+            if (lastMessage && lastMessage.role === "assistant" && lastMessage.isStreaming) {
+              // Create a new message object instead of mutating
+              newMessages[newMessages.length - 1] = {
+                ...lastMessage,
+                content: finalData.content,
+                isStreaming: false
+              };
+            }
+            return newMessages;
+          });
+          setLoading(false);
+        },
+        // onError - called on error
+        (error) => {
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            const lastMessage = newMessages[newMessages.length - 1];
+            if (lastMessage && lastMessage.role === "assistant" && lastMessage.isStreaming) {
+              // Create a new message object instead of mutating
+              newMessages[newMessages.length - 1] = {
+                ...lastMessage,
+                content: `Sorry, there was an error: ${error}`,
+                isStreaming: false
+              };
+            }
+            return newMessages;
+          });
+          setLoading(false);
+        }
+      );
     } catch (error) {
       console.error('Error sending message:', error);
       // Remove the user message if sending failed
-      setMessages((prev) => prev.slice(0, -1));
+      setMessages((prev) => prev.slice(0, -2)); // Remove both user and assistant messages
       
       // Add error message
       const errorMsg = {
@@ -57,7 +97,6 @@ function Chat({ isSidebarCollapsed }) {
         content: "Sorry, there was an error processing your message. Please try again.",
       };
       setMessages((prev) => [...prev, errorMsg]);
-    } finally {
       setLoading(false);
     }
   };
@@ -244,6 +283,8 @@ function Chat({ isSidebarCollapsed }) {
         height: "100vh",
         position: "relative",
         overflowY: "auto",
+        scrollbarWidth: "none", // Firefox
+        msOverflowStyle: "none", // IE and Edge
       }}>
         <div style={{ 
           width: '100%', 
@@ -299,16 +340,6 @@ function Chat({ isSidebarCollapsed }) {
                 </div>
               );
             })}
-            {loading && <div style={{ 
-              padding: "16px 20px", 
-              backgroundColor: "#171717",
-              borderRadius: "16px",
-              color: "#a0a0a0",
-              fontStyle: "italic",
-              width: "fit-content",
-              alignSelf: "flex-start",
-              marginBottom: "16px",
-            }}>Typing...</div>}
           </div>
         </div>
 
@@ -316,7 +347,7 @@ function Chat({ isSidebarCollapsed }) {
         <div style={{
           position: "fixed",
           bottom: 0,
-          left: isSidebarCollapsed ? 85 : 275, // Account for sidebar width
+          left: isSidebarCollapsed ? 90 : 300, // Account for sidebar width
           right: 0,
           backgroundColor: "#1e1e20",
           padding: "20px",

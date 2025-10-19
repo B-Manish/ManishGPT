@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, EmailStr
 from agno.agent import Agent as AgnoAgent
 from agno.models.openai import OpenAIChat
@@ -11,6 +12,8 @@ import jwt
 import bcrypt
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
+import asyncio
+import json
 
 
 from sqlalchemy.orm import Session
@@ -1005,6 +1008,111 @@ def send_message(
             "ai_response": error_message,
             "error": str(e)
         }
+
+@app.post("/user/conversations/{conversation_id}/messages/stream")
+async def send_message_stream(
+    conversation_id: int,
+    message_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Send a message in a conversation with streaming response"""
+    # Verify conversation belongs to user
+    conversation = db.query(Conversation).filter(
+        Conversation.id == conversation_id,
+        Conversation.user_id == current_user.id
+    ).first()
+    
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    content = message_data.get("content")
+    if not content:
+        raise HTTPException(status_code=400, detail="content is required")
+    
+    # Create user message
+    user_message = Message(
+        conversation_id=conversation_id,
+        role="user",
+        content=content,
+        sender_type="user",
+        timestamp=datetime.utcnow()
+    )
+    
+    db.add(user_message)
+    db.commit()
+    db.refresh(user_message)
+    
+    async def generate_stream():
+        try:
+            # Send user message first
+            yield f"data: {json.dumps({'type': 'user_message', 'data': {'id': user_message.id, 'content': user_message.content, 'role': user_message.role}})}\n\n"
+            
+            # Get conversation history for context
+            recent_messages = db.query(Message).filter(
+                Message.conversation_id == conversation_id
+            ).order_by(Message.timestamp.desc()).limit(10).all()
+            
+            # Convert to format expected by AgnoTeamService
+            conversation_history = []
+            for msg in reversed(recent_messages):
+                conversation_history.append({
+                    "role": msg.role,
+                    "content": msg.content
+                })
+            
+            # Process message with persona's team leader
+            ai_response = agno_team_service.process_message_with_persona(
+                db=db,
+                persona_id=conversation.persona_id,
+                message=content,
+                conversation_history=conversation_history[:-1]
+            )
+            
+            # Simulate streaming by breaking response into character chunks
+            chunk_size = 1  # One character per chunk for letter-by-letter streaming
+            full_response = ""
+            
+            for i in range(0, len(ai_response), chunk_size):
+                chunk = ai_response[i:i + chunk_size]
+                full_response += chunk
+                
+                # Send chunk
+                yield f"data: {json.dumps({'type': 'chunk', 'data': chunk})}\n\n"
+                
+                # Small delay to simulate streaming
+                await asyncio.sleep(0.03)  # Faster for letter-by-letter
+            
+            # Create final AI message
+            ai_message = Message(
+                conversation_id=conversation_id,
+                role="assistant",
+                content=full_response,
+                sender_type="persona",
+                agent_name="Team Leader",
+                timestamp=datetime.utcnow()
+            )
+            
+            db.add(ai_message)
+            db.commit()
+            db.refresh(ai_message)
+            
+            # Send completion signal
+            yield f"data: {json.dumps({'type': 'complete', 'data': {'id': ai_message.id, 'content': full_response, 'role': ai_message.role}})}\n\n"
+            
+        except Exception as e:
+            # Send error
+            yield f"data: {json.dumps({'type': 'error', 'data': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Content-Type": "text/event-stream",
+        }
+    )
 
 # =============================================================================
 # PERSONA MANAGEMENT ENDPOINTS
