@@ -2,6 +2,9 @@
 AgnoTeamService - Manages Agno agents and teams for personas
 """
 from typing import List, Optional, Dict, Any
+from contextlib import contextmanager
+import sys
+import io
 from sqlalchemy.orm import Session
 from agno.agent import Agent as AgnoAgent
 from agno.models.openai import OpenAIChat
@@ -173,10 +176,35 @@ class AgnoTeamService:
                 
                 if file_info:
                     enhanced_message += f"\n\nAttached Files:\n" + "\n".join(file_info)
-            
-            # Process the message directly
-            response = agent.run(enhanced_message)
-            return response.content
+
+            # Capture Agno stdout but still print to terminal (tee)
+            class _Tee(io.TextIOBase):
+                def __init__(self, a, b):
+                    self.a = a
+                    self.b = b
+                def write(self, s):
+                    if hasattr(self.a, "write"):
+                        self.a.write(s)
+                    if hasattr(self.b, "write"):
+                        self.b.write(s)
+                    return len(s)
+                def flush(self):
+                    if hasattr(self.a, "flush"):
+                        self.a.flush()
+                    if hasattr(self.b, "flush"):
+                        self.b.flush()
+
+            buf = io.StringIO()
+            old_stdout = sys.stdout
+            sys.stdout = _Tee(old_stdout, buf)
+            try:
+                response = agent.run(enhanced_message)
+            finally:
+                sys.stdout = old_stdout
+            raw_log = buf.getvalue()
+
+            # Return both content and raw log for persistence upstream
+            return {"content": response.content, "raw_log": raw_log}
             
         except Exception as e:
             return f"Error processing message: {str(e)}"

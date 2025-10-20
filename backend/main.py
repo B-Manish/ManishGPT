@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, Depends, HTTPException, status, UploadFile, File
+import re
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import StreamingResponse
@@ -979,14 +980,14 @@ def send_message(
                 })
             
             # Process message with persona's team leader
-            ai_response = agno_team_service.process_message_with_persona(
+            ai_result = agno_team_service.process_message_with_persona(
                 db=db,
                 persona_id=conversation.persona_id,
                 message=content,
                 conversation_history=conversation_history[:-1],  # Exclude the current message
                 file_ids=file_ids
             )
-            
+            ai_response = ai_result["content"] if isinstance(ai_result, dict) else ai_result
             # Create AI response message
             ai_message = Message(
                 conversation_id=conversation_id,
@@ -996,10 +997,27 @@ def send_message(
                 agent_name="Team Leader",
                 timestamp=datetime.utcnow()
             )
-            
+            # First persist AI message to get a real ID
             db.add(ai_message)
             db.commit()
             db.refresh(ai_message)
+
+            # Persist raw Agno log if available (now with message_id present)
+            try:
+                from models import AgentRunLog
+                if isinstance(ai_result, dict) and ai_result.get("raw_log"):
+                    ansi_cleaner = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
+                    clean_log = ansi_cleaner.sub("", ai_result["raw_log"])
+                    run_log = AgentRunLog(
+                        conversation_id=conversation_id,
+                        persona_id=conversation.persona_id,
+                        message_id=ai_message.id,
+                        raw_log=clean_log,
+                    )
+                    db.add(run_log)
+                    db.commit()
+            except Exception as _:
+                pass
             
             return {
                 "user_message": user_message,
@@ -1082,14 +1100,15 @@ async def send_message_stream(
                 })
             
             # Process message with persona's team leader
-            ai_response = agno_team_service.process_message_with_persona(
+            ai_result = agno_team_service.process_message_with_persona(
                 db=db,
                 persona_id=conversation.persona_id,
                 message=content,
                 conversation_history=conversation_history[:-1],
                 file_ids=file_ids
             )
-            
+            ai_response = ai_result["content"] if isinstance(ai_result, dict) else ai_result
+
             # Create AI message
             ai_message = Message(
                 conversation_id=conversation_id,
@@ -1099,6 +1118,27 @@ async def send_message_stream(
                 agent_name="Team Leader",
                 timestamp=datetime.utcnow()
             )
+            # First persist AI message to get a real ID
+            db.add(ai_message)
+            db.commit()
+            db.refresh(ai_message)
+
+            # Persist raw Agno log if available (now with message_id present)
+            try:
+                from models import AgentRunLog
+                if isinstance(ai_result, dict) and ai_result.get("raw_log"):
+                    ansi_cleaner = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
+                    clean_log = ansi_cleaner.sub("", ai_result["raw_log"])
+                    run_log = AgentRunLog(
+                        conversation_id=conversation_id,
+                        persona_id=conversation.persona_id,
+                        message_id=ai_message.id,
+                        raw_log=clean_log,
+                    )
+                    db.add(run_log)
+                    db.commit()
+            except Exception:
+                pass
             
             db.add(ai_message)
             db.commit()

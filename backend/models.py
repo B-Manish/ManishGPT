@@ -234,3 +234,17 @@ class ConversationAnalytics(Base):
     
     # Relationships
     conversation = relationship("Conversation")
+
+# Store raw Agno logs per agent run
+class AgentRunLog(Base):
+    __tablename__ = "agent_run_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
+    persona_id = Column(Integer, ForeignKey("personas.id"), nullable=False)
+    message_id = Column(Integer, ForeignKey("messages.id"), nullable=False)
+    raw_log = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    conversation = relationship("Conversation")
+    message = relationship("Message")
