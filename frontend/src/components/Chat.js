@@ -14,6 +14,8 @@ function Chat({ isSidebarCollapsed }) {
   const [hoveredMessage, setHoveredMessage] = useState(null);
   const [messageReactions, setMessageReactions] = useState({});
   const [copiedMessageId, setCopiedMessageId] = useState(null);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -24,11 +26,18 @@ function Chat({ isSidebarCollapsed }) {
   }, [id]);
 
   const handleSend = async () => {
-    if (!input.trim() || !id) return;
+    if (!input.trim()) return;
+    
+    // If no conversation ID, show message to select a persona first
+    if (!id) {
+      alert("Please select a persona from the sidebar to start chatting.");
+      return;
+    }
 
     const userMsg = { role: "user", content: input };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
+    setUploadedFiles([]); // Clear uploaded files after sending
     setLoading(true);
 
     // Add a placeholder for the streaming response
@@ -38,7 +47,10 @@ function Chat({ isSidebarCollapsed }) {
     try {
       await userAPI.sendMessageStream(
         id,
-        input,
+        {
+          content: input,
+          file_ids: uploadedFiles.map(file => file.file_id)
+        },
         // onChunk - called for each chunk
         (chunk) => {
           setMessages((prev) => {
@@ -165,6 +177,31 @@ function Chat({ isSidebarCollapsed }) {
     }
   };
 
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File too large. Maximum size is 10MB');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await userAPI.uploadFile(formData);
+      setUploadedFiles(prev => [...prev, response]);
+    } catch (error) {
+      console.error('File upload failed:', error);
+      alert('File upload failed. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   // Custom components for ReactMarkdown
   const components = {
     code({ node, inline, className, children, ...props }) {
@@ -266,7 +303,7 @@ function Chat({ isSidebarCollapsed }) {
   };
 
   return (
-    messages.length === 0 ? <div style={{
+    (messages.length === 0 || !id) ? <div style={{
       backgroundColor: '#1e1e20',
       color: "white",
       display: "flex",
@@ -291,6 +328,8 @@ function Chat({ isSidebarCollapsed }) {
           backgroundColor: "#40414f",
           borderRadius: "30px",
           width: '90%',
+          gap: "12px",
+          alignItems: "center"
         }}>
           <input
             type="text"
@@ -300,13 +339,44 @@ function Chat({ isSidebarCollapsed }) {
             placeholder="Ask something..."
             style={{
               flex: 1,
-              backgroundColor: "#40414f",
+              backgroundColor: "transparent",
               border: "none",
               color: "white",
               fontSize: "16px",
               outline: "none",
             }}
           />
+          
+          {/* File Upload Button for Welcome Screen */}
+          <input
+            type="file"
+            id="file-upload-welcome"
+            onChange={handleFileUpload}
+            style={{ display: 'none' }}
+            accept="image/*,.pdf,.txt,.doc,.docx,.zip,.rar,.js,.css,.html,.py"
+          />
+          <label
+            htmlFor="file-upload-welcome"
+            style={{
+              backgroundColor: "#565869",
+              border: "none",
+              borderRadius: "50%",
+              width: "40px",
+              height: "40px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: isUploading ? "not-allowed" : "pointer",
+              opacity: isUploading ? 0.6 : 1,
+              transition: "all 0.2s ease",
+              color: "white",
+              fontSize: "18px"
+            }}
+            title="Upload file"
+          >
+            {isUploading ? "⏳" : "📎"}
+          </label>
+          
           <button
             onClick={handleSend}
             style={{
@@ -322,7 +392,57 @@ function Chat({ isSidebarCollapsed }) {
           >
             ➤
           </button>
-        </div></div>
+        </div>
+        
+        {/* File Preview Area for Welcome Screen */}
+        {uploadedFiles.length > 0 && (
+          <div style={{
+            marginTop: "20px",
+            width: "90%",
+            backgroundColor: "#2d2d30",
+            padding: "16px",
+            borderRadius: "12px",
+            border: "1px solid rgba(255,255,255,0.1)"
+          }}>
+            <div style={{
+              display: "flex",
+              gap: "12px",
+              flexWrap: "wrap"
+            }}>
+              {uploadedFiles.map((file, index) => (
+                <div key={file.file_id} style={{
+                  backgroundColor: "#40414f",
+                  padding: "8px 12px",
+                  borderRadius: "12px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  fontSize: "14px",
+                  color: "white",
+                  border: "1px solid rgba(255,255,255,0.1)"
+                }}>
+                  <span>📄</span>
+                  <span>{file.filename}</span>
+                  <button
+                    onClick={() => setUploadedFiles(prev => prev.filter((_, i) => i !== index))}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#888",
+                      cursor: "pointer",
+                      fontSize: "16px",
+                      padding: "2px"
+                    }}
+                    title="Remove file"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div> :
       <div style={{
         flex: 1,
@@ -520,6 +640,61 @@ function Chat({ isSidebarCollapsed }) {
           </div>
         </div>
 
+        {/* File Preview Area */}
+        {uploadedFiles.length > 0 && (
+          <div style={{
+            position: "fixed",
+            bottom: "100px",
+            left: isSidebarCollapsed ? 90 : 300,
+            right: 0,
+            backgroundColor: "#2d2d30",
+            padding: "16px 20px",
+            zIndex: 999,
+            display: "flex",
+            justifyContent: "center",
+            borderTop: "1px solid rgba(255,255,255,0.1)"
+          }}>
+            <div style={{
+              display: "flex",
+              gap: "12px",
+              flexWrap: "wrap",
+              maxWidth: "1000px",
+              width: "100%"
+            }}>
+              {uploadedFiles.map((file, index) => (
+                <div key={file.file_id} style={{
+                  backgroundColor: "#40414f",
+                  padding: "8px 12px",
+                  borderRadius: "12px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  fontSize: "14px",
+                  color: "white",
+                  border: "1px solid rgba(255,255,255,0.1)"
+                }}>
+                  <span>📄</span>
+                  <span>{file.filename}</span>
+                  <button
+                    onClick={() => setUploadedFiles(prev => prev.filter((_, i) => i !== index))}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#888",
+                      cursor: "pointer",
+                      fontSize: "16px",
+                      padding: "2px"
+                    }}
+                    title="Remove file"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Fixed Input Bar at Bottom */}
         <div style={{
           position: "fixed",
@@ -564,6 +739,37 @@ function Chat({ isSidebarCollapsed }) {
                 transition: "opacity 0.2s ease"
               }}
             />
+            
+            {/* File Upload Button */}
+            <input
+              type="file"
+              id="file-upload"
+              onChange={handleFileUpload}
+              style={{ display: 'none' }}
+              accept="image/*,.pdf,.txt,.doc,.docx,.zip,.rar,.js,.css,.html,.py"
+            />
+            <label
+              htmlFor="file-upload"
+              style={{
+                backgroundColor: "#565869",
+                border: "none",
+                borderRadius: "50%",
+                width: "40px",
+                height: "40px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: isUploading ? "not-allowed" : "pointer",
+                opacity: isUploading ? 0.6 : 1,
+                transition: "all 0.2s ease",
+                color: "white",
+                fontSize: "18px"
+              }}
+              title="Upload file"
+            >
+              {isUploading ? "⏳" : "📎"}
+            </label>
+            
             <button
               onClick={handleSend}
               disabled={loading || !input.trim()}

@@ -148,7 +148,8 @@ class AgnoTeamService:
         db: Session, 
         persona_id: int, 
         message: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        file_ids: Optional[List[int]] = None
     ) -> str:
         """Process a message using the persona's agent"""
         # Get the persona
@@ -163,8 +164,18 @@ class AgnoTeamService:
             return "Sorry, this persona doesn't have any active agents configured."
         
         try:
+            # Enhance message with file information if files are attached
+            enhanced_message = message
+            if file_ids:
+                file_info = []
+                for file_id in file_ids:
+                    file_info.append(f"[File ID: {file_id} - Use process_file tool to analyze this file]")
+                
+                if file_info:
+                    enhanced_message += f"\n\nAttached Files:\n" + "\n".join(file_info)
+            
             # Process the message directly
-            response = agent.run(message)
+            response = agent.run(enhanced_message)
             return response.content
             
         except Exception as e:

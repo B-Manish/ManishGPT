@@ -22,7 +22,11 @@ dependencies = [
     "groq",
     "pyjwt",
     "bcrypt",
-    "python-multipart"
+    "python-multipart",
+    "minio",
+    "pypdf2",
+    "python-docx",
+    "python-magic"
 ]
 
 [build-system]

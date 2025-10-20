@@ -78,7 +78,7 @@ export const userAPI = {
     return response.data;
   },
   
-  sendMessageStream: async (conversationId, message, onChunk, onComplete, onError) => {
+  sendMessageStream: async (conversationId, messageData, onChunk, onComplete, onError) => {
     const token = localStorage.getItem('userToken');
     
     try {
@@ -88,7 +88,7 @@ export const userAPI = {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ content: message }),
+        body: JSON.stringify(messageData),
       });
 
       if (!response.ok) {
@@ -142,6 +142,44 @@ export const userAPI = {
   
   getMessages: async (conversationId) => {
     const response = await api.get(`/user/conversations/${conversationId}/messages`);
+    return response.data;
+  },
+
+  // File upload methods
+  uploadFile: async (formData) => {
+    const token = localStorage.getItem('userToken');
+    const response = await fetch(`${API_BASE_URL}/user/upload`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Upload failed: ${response.status}`);
+    }
+    
+    return response.json();
+  },
+
+  downloadFile: async (fileId) => {
+    const token = localStorage.getItem('userToken');
+    const response = await fetch(`${API_BASE_URL}/user/files/${fileId}/download`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Download failed: ${response.status}`);
+    }
+    
+    return response.json();
+  },
+
+  deleteFile: async (fileId) => {
+    const response = await api.delete(`/user/files/${fileId}`);
     return response.data;
   },
 };

@@ -45,6 +45,32 @@ class Agent(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+# File Management Models
+class File(Base):
+    __tablename__ = "files"
+    id = Column(Integer, primary_key=True, index=True)
+    filename = Column(String, nullable=False)  # Original filename
+    object_name = Column(String, nullable=False)  # MinIO object name
+    file_size = Column(Integer, nullable=False)
+    content_type = Column(String, nullable=False)
+    bucket_name = Column(String, nullable=False)
+    uploaded_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    uploaded_by = relationship("User", foreign_keys=[uploaded_by_id])
+
+class MessageFile(Base):
+    __tablename__ = "message_files"
+    id = Column(Integer, primary_key=True, index=True)
+    message_id = Column(Integer, ForeignKey("messages.id"), nullable=False)
+    file_id = Column(Integer, ForeignKey("files.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    message = relationship("Message", foreign_keys=[message_id])
+    file = relationship("File", foreign_keys=[file_id])
+
 # Junction tables removed - using JSON columns instead
 # class AgentTool(Base):
 #     __tablename__ = "agent_tools"

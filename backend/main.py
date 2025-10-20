@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Depends, HTTPException, status
+from fastapi import FastAPI, Request, Depends, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import StreamingResponse
@@ -30,11 +30,14 @@ from models import (
     ToolUsage, 
     AgentInteraction, 
     ConversationAnalytics,
-    Agent
+    Agent,
+    File as FileModel,
+    MessageFile
 )
 from typing import List
 from datetime import datetime
 from services.agno_team_service import agno_team_service
+from services.file_service import file_service
 
 
 
@@ -942,6 +945,8 @@ def send_message(
             raise HTTPException(status_code=404, detail="Conversation not found")
         
         content = message_data.get("content")
+        file_ids = message_data.get("file_ids", [])
+        
         if not content:
             raise HTTPException(status_code=400, detail="content is required")
         
@@ -978,7 +983,8 @@ def send_message(
                 db=db,
                 persona_id=conversation.persona_id,
                 message=content,
-                conversation_history=conversation_history[:-1]  # Exclude the current message
+                conversation_history=conversation_history[:-1],  # Exclude the current message
+                file_ids=file_ids
             )
             
             # Create AI response message
@@ -1042,6 +1048,8 @@ async def send_message_stream(
             raise HTTPException(status_code=404, detail="Conversation not found")
         
         content = message_data.get("content")
+        file_ids = message_data.get("file_ids", [])
+        
         if not content:
             raise HTTPException(status_code=400, detail="content is required")
         
@@ -1078,7 +1086,8 @@ async def send_message_stream(
                 db=db,
                 persona_id=conversation.persona_id,
                 message=content,
-                conversation_history=conversation_history[:-1]
+                conversation_history=conversation_history[:-1],
+                file_ids=file_ids
             )
             
             # Create AI message
@@ -1595,7 +1604,7 @@ def create_default_agent(
         agent_name=f"{persona.name} Assistant",
         agent_role="assistant",
         instructions=f"You are an assistant for {persona.name}. {persona.instructions or 'Help users with their requests.'}",
-        tool_names=["youtube"]  # Default tools
+        tool_names=["youtube", "file_processing"]  # Default tools
     )
     
     return {"message": "Agent created successfully", "agent_id": agent.id}
@@ -1625,6 +1634,129 @@ def get_all_tools(
         })
     
     return tool_responses
+
+
+# File Upload Endpoints
+@app.post("/user/upload")
+async def upload_file(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Upload a file and return file info"""
+    try:
+        # Validate file size (max 10MB)
+        max_size = 10 * 1024 * 1024  # 10MB
+        file_content = await file.read()
+        if len(file_content) > max_size:
+            raise HTTPException(status_code=400, detail="File too large. Maximum size is 10MB")
+        
+        # Validate file type
+        allowed_types = [
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+            'application/pdf', 'text/plain', 'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/zip', 'application/x-rar-compressed',
+            'text/javascript', 'text/css', 'text/html', 'text/x-python'
+        ]
+        
+        if file.content_type not in allowed_types:
+            raise HTTPException(status_code=400, detail="File type not allowed")
+        
+        # Upload to MinIO
+        from io import BytesIO
+        file_data = BytesIO(file_content)
+        file_info = file_service.upload_file(
+            file_data, 
+            file.filename, 
+            file.content_type
+        )
+        
+        # Save file info to database
+        db_file = FileModel(
+            filename=file_info['filename'],
+            object_name=file_info['object_name'],
+            file_size=file_info['file_size'],
+            content_type=file_info['content_type'],
+            bucket_name=file_info['bucket_name'],
+            uploaded_by_id=current_user.id
+        )
+        
+        db.add(db_file)
+        db.commit()
+        db.refresh(db_file)
+        
+        return {
+            "file_id": db_file.id,
+            "filename": db_file.filename,
+            "file_size": db_file.file_size,
+            "content_type": db_file.content_type,
+            "uploaded_at": db_file.created_at.isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+@app.get("/user/files/{file_id}/download")
+async def download_file(
+    file_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get download URL for a file"""
+    try:
+        # Get file info from database
+        file_record = db.query(FileModel).filter(FileModel.id == file_id).first()
+        if not file_record:
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        # Check if user has access to this file
+        if file_record.uploaded_by_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Generate download URL
+        download_url = file_service.get_download_url(file_record.object_name)
+        
+        return {
+            "download_url": download_url,
+            "filename": file_record.filename,
+            "file_size": file_record.file_size,
+            "content_type": file_record.content_type
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
+
+@app.delete("/user/files/{file_id}")
+async def delete_file(
+    file_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a file"""
+    try:
+        # Get file info from database
+        file_record = db.query(FileModel).filter(FileModel.id == file_id).first()
+        if not file_record:
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        # Check if user has access to this file
+        if file_record.uploaded_by_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Delete from MinIO
+        success = file_service.delete_file(file_record.object_name)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to delete file from storage")
+        
+        # Delete from database
+        db.delete(file_record)
+        db.commit()
+        
+        return {"message": "File deleted successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
 
 
 

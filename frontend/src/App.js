@@ -33,20 +33,7 @@ function App() {
                 }}>
                   <Routes>
                     <Route path="/chat/:id" element={<Chat isSidebarCollapsed={isSidebarCollapsed} />} />
-                    <Route path="*" element={
-                      <div style={{ 
-                        padding: 20, 
-                        backgroundColor: "#1e1e20",
-                        color: "white",
-                        flex: 1,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "18px"
-                      }}>
-                        Select a persona to start chatting.
-                      </div>
-                    } />
+                    <Route path="*" element={<Chat isSidebarCollapsed={isSidebarCollapsed} />} />
                   </Routes>
                 </div>
               </div>
