@@ -7,6 +7,7 @@ import sys
 import io
 from sqlalchemy.orm import Session
 from agno.agent import Agent as AgnoAgent
+from agno.team.team import Team
 from agno.models.openai import OpenAIChat
 from agno.models.groq import Groq
 from dotenv import load_dotenv
@@ -40,15 +41,110 @@ class AgnoTeamService:
         tool_names = agent_model.tools or []
         tools = get_tools(tool_names)
         
-        # Create Agno Agent
+        # Create Agno Agent with role
         return AgnoAgent(
             name=agent_model.name,
+            role=f"{agent_model.role}: {agent_model.instructions}",  # Role with instructions
             model=model,
             tools=tools,
-            instructions=[agent_model.instructions],
             debug_mode=True,
             debug_level=2,
         )
+    
+    def create_team_from_persona(self, db: Session, persona_id: int) -> Optional[Team]:
+        """Create an Agno Team from a persona's agents"""
+        # Get the persona
+        persona = db.query(Persona).filter(Persona.id == persona_id).first()
+        if not persona:
+            return None
+        
+        # Get all active agents for this persona
+        if not persona.agents or len(persona.agents) == 0:
+            return None
+        
+        # Get agent models from database
+        agent_models = db.query(AgentModel).filter(
+            AgentModel.id.in_(persona.agents),
+            AgentModel.is_active == True
+        ).all()
+        
+        if not agent_models:
+            return None
+        
+        # If only one agent, return single agent wrapped in team
+        if len(agent_models) == 1:
+            single_agent = self.create_agent_from_model(agent_models[0])
+            
+            # Get model for team
+            if persona.model_provider.lower() == "openai":
+                team_model = OpenAIChat(id=persona.model_id, api_key=self.openai_api_key)
+            elif persona.model_provider.lower() == "groq":
+                team_model = Groq(id=persona.model_id, api_key=self.groq_api_key)
+            else:
+                team_model = OpenAIChat(id="gpt-4o", api_key=self.openai_api_key)
+            
+            # Create a team with single member
+            return Team(
+                name=f"{persona.name} Team",
+                model=team_model,
+                members=[single_agent],
+                instructions=[
+                    persona.instructions or f"You are {persona.name}. Help users with their requests."
+                ],
+                debug_mode=True,
+                debug_level=2,
+                show_members_responses=True,
+                markdown=True,
+            )
+        
+        # Multiple agents - create true collaborative team
+        team_members = []
+        for agent_model in agent_models:
+            try:
+                agno_agent = self.create_agent_from_model(agent_model)
+                team_members.append(agno_agent)
+            except Exception as e:
+                print(f"Error creating agent {agent_model.name}: {e}")
+                continue
+        
+        if not team_members:
+            return None
+        
+        # Get model for team
+        if persona.model_provider.lower() == "openai":
+            team_model = OpenAIChat(id=persona.model_id, api_key=self.openai_api_key)
+        elif persona.model_provider.lower() == "groq":
+            team_model = Groq(id=persona.model_id, api_key=self.groq_api_key)
+        else:
+            team_model = OpenAIChat(id="gpt-4o", api_key=self.openai_api_key)
+        
+        # Build team instructions from persona config or defaults
+        team_instructions = []
+        if persona.instructions:
+            team_instructions.append(persona.instructions)
+        
+        # Add role-based delegation instructions
+        team_instructions.extend([
+            "You are the team leader coordinating specialized agents.",
+            "Analyze the user's request and delegate tasks to the most appropriate team members.",
+            "Each team member has specific expertise - use them effectively.",
+            "Synthesize the team members' responses into a comprehensive answer.",
+        ])
+        
+        # Create Team
+        team = Team(
+            name=f"{persona.name} Team",
+            model=team_model,
+            members=team_members,
+            instructions=team_instructions,
+            debug_mode=True,
+            debug_level=2,
+            show_members_responses=True,
+            markdown=True,
+            add_member_tools_to_context=False,  # Keep tool context clean
+        )
+        
+        return team
     
     def get_persona_team_leader(self, db: Session, persona_id: int) -> Optional[AgnoAgent]:
         """Get any active agent for a persona (previously called team leader)"""
@@ -153,22 +249,34 @@ class AgnoTeamService:
         message: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         file_ids: Optional[List[int]] = None
-    ) -> str:
-        """Process a message using the persona's agent"""
+    ) -> Dict[str, Any]:
+        """Process a message using the persona's Agno Team"""
         # Get the persona
         persona = db.query(Persona).filter(Persona.id == persona_id).first()
         if not persona:
-            return "Sorry, this persona doesn't exist."
+            return {"content": "Sorry, this persona doesn't exist.", "raw_log": ""}
         
-        # Get any active agent for this persona
-        agent = self.get_persona_team_leader(db, persona_id)
+        # Create Team from persona's agents
+        team = self.create_team_from_persona(db, persona_id)
         
-        if not agent:
-            return "Sorry, this persona doesn't have any active agents configured."
+        if not team:
+            return {"content": "Sorry, this persona doesn't have any active agents configured.", "raw_log": ""}
         
         try:
+            # Build context with conversation history
+            if conversation_history and len(conversation_history) > 0:
+                context_messages = []
+                for msg in conversation_history:
+                    role_label = "User" if msg["role"] == "user" else "Assistant"
+                    context_messages.append(f"{role_label}: {msg['content']}")
+                
+                context = "\n".join(context_messages)
+                full_message = f"Previous conversation:\n{context}\n\nCurrent message: {message}"
+            else:
+                full_message = message
+            
             # Enhance message with file information if files are attached
-            enhanced_message = message
+            enhanced_message = full_message
             if file_ids:
                 file_info = []
                 for file_id in file_ids:
@@ -198,7 +306,8 @@ class AgnoTeamService:
             old_stdout = sys.stdout
             sys.stdout = _Tee(old_stdout, buf)
             try:
-                response = agent.run(enhanced_message)
+                # Use Team.run() for collaborative execution
+                response = team.run(enhanced_message)
             finally:
                 sys.stdout = old_stdout
             raw_log = buf.getvalue()
@@ -207,7 +316,7 @@ class AgnoTeamService:
             return {"content": response.content, "raw_log": raw_log}
             
         except Exception as e:
-            return f"Error processing message: {str(e)}"
+            return {"content": f"Error processing message: {str(e)}", "raw_log": ""}
     
     def get_persona_team_info(self, db: Session, persona_id: int) -> Dict[str, Any]:
         """Get information about a persona's team"""

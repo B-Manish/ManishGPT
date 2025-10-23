@@ -29,6 +29,8 @@ dependencies = [
     "python-magic",
     "discord-py>=2.6.4",
     "pygithub>=2.8.1",
+    "newspaper4k>=0.9.3.1",
+    "lxml-html-clean>=0.4.3",
 ]
 
 [build-system]
