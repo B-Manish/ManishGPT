@@ -175,8 +175,6 @@ class Conversation(Base):
     user = relationship("User", back_populates="conversations")
     persona = relationship("Persona", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation")
-    tool_usages = relationship("ToolUsage", back_populates="conversation")
-    agent_interactions = relationship("AgentInteraction", back_populates="conversation")
 
 class Message(Base):
     __tablename__ = "messages"
@@ -191,49 +189,8 @@ class Message(Base):
     # Relationships
     conversation = relationship("Conversation", back_populates="messages")
 
-# Tracking Models
-class ToolUsage(Base):
-    __tablename__ = "tool_usages"
-    id = Column(Integer, primary_key=True, index=True)
-    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
-    tool_name = Column(String, nullable=False)
-    input_data = Column(JSON)
-    output_data = Column(JSON)
-    execution_time = Column(Float)  # Time taken in seconds
-    success = Column(Boolean, default=True)
-    error_message = Column(Text)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    conversation = relationship("Conversation", back_populates="tool_usages")
-
-class AgentInteraction(Base):
-    __tablename__ = "agent_interactions"
-    id = Column(Integer, primary_key=True, index=True)
-    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
-    agent_name = Column(String, nullable=False)
-    action = Column(String, nullable=False)  # delegate, respond, analyze, etc.
-    details = Column(JSON)  # Additional interaction details
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    conversation = relationship("Conversation", back_populates="agent_interactions")
-
-# Analytics Models
-class ConversationAnalytics(Base):
-    __tablename__ = "conversation_analytics"
-    id = Column(Integer, primary_key=True, index=True)
-    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
-    total_messages = Column(Integer, default=0)
-    total_tool_usages = Column(Integer, default=0)
-    total_agent_interactions = Column(Integer, default=0)
-    average_response_time = Column(Float)
-    user_satisfaction_score = Column(Float)  # If you implement rating system
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
-    conversation = relationship("Conversation")
+# Tracking Models (Removed: ToolUsage, AgentInteraction, ConversationAnalytics)
+# These tables were removed as they are not used with Agno Teams implementation
 
 # Store raw Agno logs per agent run
 class AgentRunLog(Base):

@@ -6,6 +6,7 @@ from agno.tools import Toolkit
 from .yt_tool import YouTube_Tool
 from .web_search_tool import WebSearchTool
 from .file_processing_tool import FileProcessingTool
+from .gmail_tool import GmailTool
 
 
 # Registry maps a short tool name to a factory that returns a Toolkit instance
@@ -13,6 +14,7 @@ TOOL_REGISTRY: Dict[str, Callable[[], Toolkit]] = {
     "youtube": lambda: YouTube_Tool(),
     "web_search": lambda: WebSearchTool(),
     "file_processing": lambda: FileProcessingTool(),
+    "gmail": lambda: GmailTool(),
 }
 
 

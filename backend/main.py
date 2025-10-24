@@ -28,9 +28,6 @@ from models import (
     Tool, 
     Conversation, 
     Message, 
-    ToolUsage, 
-    AgentInteraction, 
-    ConversationAnalytics,
     Agent,
     File as FileModel,
     MessageFile
@@ -222,6 +219,18 @@ def ensure_tools_exist():
                 "name": "web_search", 
                 "description": "Web search tool for finding information",
                 "tool_class": "WebSearchTool",
+                "config": {"enabled": True}
+            },
+            {
+                "name": "file_processing",
+                "description": "File processing tool for PDF, DOCX, and other document types",
+                "tool_class": "FileProcessingTool",
+                "config": {"enabled": True}
+            },
+            {
+                "name": "gmail",
+                "description": "Gmail integration tool for email management",
+                "tool_class": "GmailTool",
                 "config": {"enabled": True}
             }
         ]
