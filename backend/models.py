@@ -194,7 +194,7 @@ class Message(Base):
 
 # Store raw Agno logs per agent run
 class AgentRunLog(Base):
-    __tablename__ = "agent_run_logs"
+    __tablename__ = "logs"
     id = Column(Integer, primary_key=True, index=True)
     conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
     persona_id = Column(Integer, ForeignKey("personas.id"), nullable=False)
