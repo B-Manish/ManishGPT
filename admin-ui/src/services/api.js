@@ -27,11 +27,29 @@ api.interceptors.request.use(
 // Response interceptor for error handling
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('adminToken');
-      window.location.href = '/login';
+  async (error) => {
+    const originalRequest = error.config;
+    
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      try {
+        // Try to refresh the token
+        const response = await api.post('/auth/refresh');
+        const newToken = response.data.access_token;
+        localStorage.setItem('adminToken', newToken);
+        
+        // Retry the original request with new token
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return api(originalRequest);
+      } catch (refreshError) {
+        // Refresh failed, redirect to login
+        localStorage.removeItem('adminToken');
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      }
     }
+    
     return Promise.reject(error);
   }
 );
@@ -45,6 +63,11 @@ export const authAPI = {
   
   getMe: async () => {
     const response = await api.get('/auth/me');
+    return response.data;
+  },
+  
+  refreshToken: async () => {
+    const response = await api.post('/auth/refresh');
     return response.data;
   },
 };
