@@ -30,7 +30,8 @@ from models import (
     Message, 
     Agent,
     File as FileModel,
-    MessageFile
+    MessageFile,
+    AgentRunLog
 )
 from typing import List
 from datetime import datetime
@@ -1807,5 +1808,62 @@ async def delete_file(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
 
+# Logs API endpoints
+@app.get("/api/logs")
+async def get_all_logs(skip: int = 0, limit: int = 100):
+    """Get all logs with pagination"""
+    db = SessionLocal()
+    try:
+        logs = db.query(AgentRunLog).order_by(
+            AgentRunLog.created_at.desc()
+        ).offset(skip).limit(limit).all()
+        
+        total_count = db.query(AgentRunLog).count()
+        
+        return {
+            "logs": [
+                {
+                    "id": log.id,
+                    "conversation_id": log.conversation_id,
+                    "persona_id": log.persona_id,
+                    "message_id": log.message_id,
+                    "raw_log": log.raw_log,
+                    "created_at": log.created_at.isoformat()
+                }
+                for log in logs
+            ],
+            "total_count": total_count,
+            "skip": skip,
+            "limit": limit
+        }
+    finally:
+        db.close()
 
+@app.get("/api/logs/{conversation_id}")
+async def get_conversation_logs(conversation_id: int):
+    """Get logs for a specific conversation"""
+    db = SessionLocal()
+    try:
+        logs = db.query(AgentRunLog).filter(
+            AgentRunLog.conversation_id == conversation_id
+        ).order_by(AgentRunLog.created_at.desc()).all()
+        
+        return {
+            "conversation_id": conversation_id,
+            "logs": [
+                {
+                    "id": log.id,
+                    "persona_id": log.persona_id,
+                    "message_id": log.message_id,
+                    "raw_log": log.raw_log,
+                    "created_at": log.created_at.isoformat()
+                }
+                for log in logs
+            ]
+        }
+    finally:
+        db.close()
 
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
