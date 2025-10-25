@@ -68,6 +68,9 @@ class GmailTool(Toolkit):
         # Define tools list
         tools = [
             self.search_emails,
+            self.search_emails_by_date_range,
+            self.search_emails_by_category,
+            self.get_unread_emails,
             self.read_email,
             self.send_email,
         ]
@@ -169,17 +172,22 @@ class GmailTool(Toolkit):
             logger.error(f"Error getting user email: {e}")
         return 'Unknown'
     
-    def search_emails(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+    def search_emails(self, query: str, max_results: int = 10, unread_only: bool = False) -> List[Dict[str, Any]]:
         """Search Gmail with custom query"""
         if not self.service:
             if not self.authenticate():
                 return []
                 
         try:
+            # Add unread filter if requested
+            gmail_query = query
+            if unread_only:
+                gmail_query = f"is:unread {query}"
+            
             # Search Gmail
             results = self.service.users().messages().list(
                 userId='me',
-                q=query,
+                q=gmail_query,
                 maxResults=max_results
             ).execute()
             
@@ -211,6 +219,226 @@ class GmailTool(Toolkit):
             
         except HttpError as e:
             logger.error(f"Gmail search error: {e}")
+            return []
+    
+    def search_emails_by_date_range(self, start_date: str, end_date: str, 
+                                  query: str = "", max_results: int = 10, unread_only: bool = False) -> List[Dict[str, Any]]:
+        """
+        Search Gmail emails between two specific dates
+        
+        Args:
+            start_date: Start date in format 'YYYY/MM/DD' (e.g., '2024/01/01')
+            end_date: End date in format 'YYYY/MM/DD' (e.g., '2024/01/31')
+            query: Additional search query (optional)
+            max_results: Maximum number of results to return
+        
+        Returns:
+            List of email details
+        """
+        if not self.service:
+            if not self.authenticate():
+                return []
+        
+        try:
+            # Format dates for Gmail search
+            # Gmail uses format: after:YYYY/MM/DD before:YYYY/MM/DD
+            gmail_query = f"after:{start_date} before:{end_date}"
+            
+            # Add unread filter if requested
+            if unread_only:
+                gmail_query += " is:unread"
+            
+            # Add additional query if provided
+            if query:
+                gmail_query += f" {query}"
+            
+            logger.info(f"Searching Gmail with query: {gmail_query}")
+            
+            # Search Gmail
+            results = self.service.users().messages().list(
+                userId='me',
+                q=gmail_query,
+                maxResults=max_results
+            ).execute()
+            
+            messages = results.get('messages', [])
+            
+            # Get full message details
+            detailed_messages = []
+            for msg in messages:
+                try:
+                    message = self.service.users().messages().get(
+                        userId='me', 
+                        id=msg['id']
+                    ).execute()
+                    
+                    detailed_messages.append({
+                        'id': msg['id'],
+                        'snippet': message.get('snippet', ''),
+                        'subject': self._extract_subject(message),
+                        'from': self._extract_sender(message),
+                        'date': self._extract_date(message),
+                        'labels': message.get('labelIds', [])
+                    })
+                except HttpError as e:
+                    logger.error(f"Error getting message {msg['id']}: {e}")
+                    continue
+
+            logger.info(f"Found {len(detailed_messages)} emails between {start_date} and {end_date}")
+            return detailed_messages
+            
+        except HttpError as e:
+            logger.error(f"Gmail date range search error: {e}")
+            return []
+    
+    def search_emails_by_category(self, category: str, query: str = "", 
+                                 max_results: int = 10, unread_only: bool = False) -> List[Dict[str, Any]]:
+        """
+        Search Gmail emails by category (Primary, Promotions, Social, Updates)
+        
+        Args:
+            category: Gmail category - 'primary', 'promotions', 'social', 'updates'
+            query: Additional search query (optional)
+            max_results: Maximum number of results to return
+        
+        Returns:
+            List of email details from the specified category
+        """
+        if not self.service:
+            if not self.authenticate():
+                return []
+        
+        # Validate category
+        valid_categories = ['primary', 'promotions', 'social', 'updates']
+        if category.lower() not in valid_categories:
+            logger.error(f"Invalid category: {category}. Valid categories: {valid_categories}")
+            return []
+        
+        try:
+            # Build Gmail query with category
+            # Use 'category:' for Gmail tabs (primary, promotions, social, updates)
+            gmail_query = f"category:{category.lower()}"
+            
+            # Add unread filter if requested
+            if unread_only:
+                gmail_query += " is:unread"
+            
+            # Add additional query if provided
+            if query:
+                gmail_query += f" {query}"
+            
+            logger.info(f"Searching Gmail category '{category}' with query: {gmail_query}")
+            
+            # Search Gmail
+            results = self.service.users().messages().list(
+                userId='me',
+                q=gmail_query,
+                maxResults=max_results
+            ).execute()
+            
+            messages = results.get('messages', [])
+            
+            # Get full message details
+            detailed_messages = []
+            for msg in messages:
+                try:
+                    message = self.service.users().messages().get(
+                        userId='me', 
+                        id=msg['id']
+                    ).execute()
+                    
+                    detailed_messages.append({
+                        'id': msg['id'],
+                        'snippet': message.get('snippet', ''),
+                        'subject': self._extract_subject(message),
+                        'from': self._extract_sender(message),
+                        'date': self._extract_date(message),
+                        'labels': message.get('labelIds', []),
+                        'category': category.lower()
+                    })
+                except HttpError as e:
+                    logger.error(f"Error getting message {msg['id']}: {e}")
+                    continue
+
+            logger.info(f"Found {len(detailed_messages)} emails in {category} category")
+            return detailed_messages
+            
+        except HttpError as e:
+            logger.error(f"Gmail category search error: {e}")
+            return []
+    
+    def get_unread_emails(self, category: str = "", query: str = "", 
+                         max_results: int = 10) -> List[Dict[str, Any]]:
+        """
+        Get only unread emails from Gmail
+        
+        Args:
+            category: Optional Gmail category - 'primary', 'promotions', 'social', 'updates'
+            query: Additional search query (optional)
+            max_results: Maximum number of results to return
+        
+        Returns:
+            List of unread email details
+        """
+        if not self.service:
+            if not self.authenticate():
+                return []
+        
+        try:
+            # Build Gmail query for unread emails
+            gmail_query = "is:unread"
+            
+            # Add category if specified
+            if category:
+                valid_categories = ['primary', 'promotions', 'social', 'updates']
+                if category.lower() in valid_categories:
+                    gmail_query += f" category:{category.lower()}"
+                else:
+                    logger.warning(f"Invalid category: {category}. Ignoring category filter.")
+            
+            # Add additional query if provided
+            if query:
+                gmail_query += f" {query}"
+            
+            logger.info(f"Searching for unread emails with query: {gmail_query}")
+            
+            # Search Gmail
+            results = self.service.users().messages().list(
+                userId='me',
+                q=gmail_query,
+                maxResults=max_results
+            ).execute()
+            
+            messages = results.get('messages', [])
+            
+            # Get full message details
+            detailed_messages = []
+            for msg in messages:
+                try:
+                    message = self.service.users().messages().get(
+                        userId='me', 
+                        id=msg['id']
+                    ).execute()
+                    
+                    detailed_messages.append({
+                        'id': msg['id'],
+                        'snippet': message.get('snippet', ''),
+                        'subject': self._extract_subject(message),
+                        'from': self._extract_sender(message),
+                        'date': self._extract_date(message),
+                        'labels': message.get('labelIds', []),
+                        'is_unread': True,
+                        'category': category.lower() if category else 'unknown'
+                    })
+                except HttpError as e:
+                    logger.error(f"Error getting message {msg['id']}: {e}")
+                    continue
+
+            logger.info(f"Found {len(detailed_messages)} unread emails")
+            return detailed_messages
+            
+        except HttpError as e:
+            logger.error(f"Gmail unread search error: {e}")
             return []
     
     def read_email(self, message_id: str) -> Dict[str, Any]:
