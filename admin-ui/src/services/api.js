@@ -172,6 +172,12 @@ export const agentAPI = {
     return response.data;
   },
   
+  // Update agent
+  update: async (agentId, agentData) => {
+    const response = await api.put(`/admin/agents/${agentId}`, agentData);
+    return response.data;
+  },
+  
   // Get agents for a persona
   getByPersona: async (personaId) => {
     const response = await api.get(`/admin/personas/${personaId}/agents`);

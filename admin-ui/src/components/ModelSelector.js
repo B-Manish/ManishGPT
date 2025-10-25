@@ -25,12 +25,6 @@ const ModelSelector = ({
   const handleProviderChange = (e) => {
     const newProvider = e.target.value;
     onProviderChange(newProvider);
-    
-    // Reset model to first option of new provider
-    const firstModel = modelOptions[newProvider]?.[0]?.value;
-    if (firstModel) {
-      onModelChange(firstModel);
-    }
   };
 
   const handleModelChange = (e) => {

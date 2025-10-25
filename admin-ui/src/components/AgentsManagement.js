@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { agentAPI, personaAPI, toolAPI } from '../services/api';
+import ModelSelector from './ModelSelector';
+import AgentEditModal from './AgentEditModal';
 
 const AgentsManagement = () => {
   const [agents, setAgents] = useState([]);
@@ -8,6 +10,8 @@ const AgentsManagement = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editingAgent, setEditingAgent] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     role: 'specialist',
@@ -83,6 +87,18 @@ const AgentsManagement = () => {
     }
   };
 
+  const handleEditAgent = (agent) => {
+    setEditingAgent(agent);
+    setShowEditModal(true);
+  };
+
+  const handleAgentUpdate = (updatedAgent) => {
+    // Update the agents list with the updated agent
+    setAgents(agents.map(agent => 
+      agent.id === updatedAgent.id ? updatedAgent : agent
+    ));
+  };
+
   if (loading) {
     return <div className="text-center py-8">Loading agents...</div>;
   }
@@ -148,12 +164,20 @@ const AgentsManagement = () => {
                         )}
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleDeleteAgent(agent.id)}
-                      className="text-red-600 hover:text-red-800 text-sm"
-                    >
-                      Delete
-                    </button>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleEditAgent(agent)}
+                        className="text-blue-600 hover:text-blue-800 text-sm"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteAgent(agent.id)}
+                        className="text-red-600 hover:text-red-800 text-sm"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -211,6 +235,40 @@ const AgentsManagement = () => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Model Configuration *
+                </label>
+                <ModelSelector
+                  modelProvider={formData.model_provider}
+                  modelId={formData.model_id}
+                  onProviderChange={(provider) => {
+                    // Get the first model for the new provider
+                    const modelOptions = {
+                      openai: [
+                        { value: 'gpt-4o', label: 'GPT-4o' },
+                        { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+                        { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+                        { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' }
+                      ],
+                      groq: [
+                        { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B Versatile' },
+                        { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant' },
+                        { value: 'llama-3.1-70b-versatile', label: 'Llama 3.1 70B Versatile' },
+                        { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B' }
+                      ]
+                    };
+                    const firstModel = modelOptions[provider]?.[0]?.value;
+                    setFormData({
+                      ...formData, 
+                      model_provider: provider,
+                      model_id: firstModel || 'gpt-4o'
+                    });
+                  }}
+                  onModelChange={(model) => setFormData({...formData, model_id: model})}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Tools
                 </label>
                 <div className="space-y-2 max-h-32 overflow-y-auto">
@@ -259,6 +317,17 @@ const AgentsManagement = () => {
           </div>
         </div>
       )}
+
+      {/* Edit Agent Modal */}
+      <AgentEditModal
+        agent={editingAgent}
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditingAgent(null);
+        }}
+        onAgentUpdate={handleAgentUpdate}
+      />
     </div>
   );
 };

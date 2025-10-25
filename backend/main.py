@@ -1614,6 +1614,43 @@ def get_persona_team_info(
     team_info = agno_team_service.get_persona_team_info(db, persona_id)
     return PersonaTeamInfo(**team_info)
 
+@app.put("/admin/agents/{agent_id}")
+def update_agent(
+    agent_id: int,
+    agent_data: AgentCreate,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Update an agent (Admin only)"""
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    # Update agent fields
+    agent.name = agent_data.name
+    agent.role = agent_data.role
+    agent.instructions = agent_data.instructions
+    agent.model_provider = agent_data.model_provider
+    agent.model_id = agent_data.model_id
+    agent.tools = agent_data.tool_names  # Use tool_names from AgentCreate model
+    agent.updated_at = datetime.utcnow()
+    
+    db.commit()
+    db.refresh(agent)
+    
+    return AgentResponse(
+        id=agent.id,
+        name=agent.name,
+        role=agent.role,
+        instructions=agent.instructions,
+        model_provider=agent.model_provider,
+        model_id=agent.model_id,
+        tools=agent.tools,
+        is_active=agent.is_active,
+        created_at=agent.created_at,
+        updated_at=agent.updated_at
+    )
+
 @app.delete("/admin/agents/{agent_id}")
 def delete_persona_agent(
     agent_id: int,
