@@ -12,6 +12,7 @@ import os
 import jwt
 import bcrypt
 from datetime import datetime, timedelta
+import pytz
 from typing import Any, Dict, List, Optional
 import asyncio
 import json
@@ -42,6 +43,13 @@ from services.model_service import model_service
 
 
 load_dotenv("config.env")
+
+# Timezone configuration
+IST = pytz.timezone('Asia/Kolkata')
+
+def get_ist_time():
+    """Get current time in IST"""
+    return datetime.now(IST)
 
 # Authentication configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
@@ -1876,7 +1884,7 @@ async def get_all_logs(skip: int = 0, limit: int = 100):
                     "persona_id": log.persona_id,
                     "message_id": log.message_id,
                     "raw_log": log.raw_log,
-                    "created_at": log.created_at.isoformat()
+                    "created_at": log.created_at.replace(tzinfo=pytz.UTC).astimezone(IST).isoformat()
                 }
                 for log in logs
             ],
@@ -1904,7 +1912,7 @@ async def get_conversation_logs(conversation_id: int):
                     "persona_id": log.persona_id,
                     "message_id": log.message_id,
                     "raw_log": log.raw_log,
-                    "created_at": log.created_at.isoformat()
+                    "created_at": log.created_at.replace(tzinfo=pytz.UTC).astimezone(IST).isoformat()
                 }
                 for log in logs
             ]
