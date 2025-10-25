@@ -6,36 +6,10 @@ import UserAssignment from './UserAssignment';
 const PersonaDetail = ({ persona, onClose, onPersonaUpdate }) => {
   const [personaData, setPersonaData] = useState(persona);
   const [activeSection, setActiveSection] = useState('overview');
-  const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState({
-    name: persona.name,
-    description: persona.description,
-    instructions: persona.instructions,
-    model_provider: persona.model_provider,
-    model_id: persona.model_id
-  });
 
   useEffect(() => {
     setPersonaData(persona);
-    setFormData({
-      name: persona.name,
-      description: persona.description,
-      instructions: persona.instructions,
-      model_provider: persona.model_provider,
-      model_id: persona.model_id
-    });
   }, [persona]);
-
-  const handleSave = async () => {
-    try {
-      const updatedPersona = await personaAPI.update(persona.id, formData);
-      setPersonaData(updatedPersona);
-      setIsEditing(false);
-      onPersonaUpdate(updatedPersona);
-    } catch (error) {
-      console.error('Error updating persona:', error);
-    }
-  };
 
   const handleDelete = async () => {
     if (window.confirm('Are you sure you want to delete this persona?')) {
@@ -102,37 +76,12 @@ const PersonaDetail = ({ persona, onClose, onPersonaUpdate }) => {
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-semibold text-gray-900">Basic Information</h3>
                   <div className="flex space-x-2">
-                    {isEditing ? (
-                      <>
-                        <button
-                          onClick={handleSave}
-                          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm"
-                        >
-                          Save
-                        </button>
-                        <button
-                          onClick={() => setIsEditing(false)}
-                          className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm"
-                        >
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => setIsEditing(true)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={handleDelete}
-                          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm"
-                        >
-                          Delete
-                        </button>
-                      </>
-                    )}
+                    <button
+                      onClick={handleDelete}
+                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm"
+                    >
+                      Delete
+                    </button>
                   </div>
                 </div>
 
@@ -141,74 +90,28 @@ const PersonaDetail = ({ persona, onClose, onPersonaUpdate }) => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Name
                     </label>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      />
-                    ) : (
-                      <p className="text-gray-900">{personaData.name}</p>
-                    )}
+                    <p className="text-gray-900">{personaData.name}</p>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Model
                     </label>
-                    {isEditing ? (
-                      <div className="flex space-x-2">
-                        <input
-                          type="text"
-                          value={formData.model_provider}
-                          onChange={(e) => setFormData({ ...formData, model_provider: e.target.value })}
-                          placeholder="Provider"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        />
-                        <input
-                          type="text"
-                          value={formData.model_id}
-                          onChange={(e) => setFormData({ ...formData, model_id: e.target.value })}
-                          placeholder="Model ID"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        />
-                      </div>
-                    ) : (
-                      <p className="text-gray-900">{personaData.model_provider} - {personaData.model_id}</p>
-                    )}
+                    <p className="text-gray-900">{personaData.model_provider} - {personaData.model_id}</p>
                   </div>
 
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Description
                     </label>
-                    {isEditing ? (
-                      <textarea
-                        value={formData.description}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        rows={3}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      />
-                    ) : (
-                      <p className="text-gray-900">{personaData.description}</p>
-                    )}
+                    <p className="text-gray-900">{personaData.description}</p>
                   </div>
 
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Instructions
                     </label>
-                    {isEditing ? (
-                      <textarea
-                        value={formData.instructions}
-                        onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
-                        rows={4}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      />
-                    ) : (
-                      <p className="text-gray-900 whitespace-pre-wrap">{personaData.instructions}</p>
-                    )}
+                    <p className="text-gray-900 whitespace-pre-wrap">{personaData.instructions}</p>
                   </div>
                 </div>
               </div>

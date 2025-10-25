@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { agentAPI, toolAPI } from '../services/api';
+import ModelSelector from './ModelSelector';
 
 const AgentManagement = ({ personaId, personaName }) => {
   const [agents, setAgents] = useState([]);
@@ -232,6 +233,18 @@ const AgentManagement = ({ personaId, personaName }) => {
                   className="w-full border border-gray-300 rounded-md px-3 py-2"
                   rows="3"
                   required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Model Configuration *
+                </label>
+                <ModelSelector
+                  modelProvider={formData.model_provider}
+                  modelId={formData.model_id}
+                  onProviderChange={(provider) => setFormData({...formData, model_provider: provider})}
+                  onModelChange={(model) => setFormData({...formData, model_id: model})}
                 />
               </div>
               

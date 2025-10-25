@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { agentAPI } from '../services/api';
+import ModelSelector from './ModelSelector';
 
 const PersonaForm = ({ persona, onSubmit, onClose }) => {
   const [formData, setFormData] = useState({
@@ -126,17 +127,14 @@ const PersonaForm = ({ persona, onSubmit, onClose }) => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Model Provider
+                  Model Configuration *
                 </label>
-                <select
-                  name="model_provider"
-                  value={formData.model_provider}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                >
-                  <option value="openai">OpenAI</option>
-                  <option value="groq">Groq</option>
-                </select>
+                <ModelSelector
+                  modelProvider={formData.model_provider}
+                  modelId={formData.model_id}
+                  onProviderChange={(provider) => setFormData(prev => ({ ...prev, model_provider: provider }))}
+                  onModelChange={(model) => setFormData(prev => ({ ...prev, model_id: model }))}
+                />
               </div>
             </div>
             
@@ -169,20 +167,6 @@ const PersonaForm = ({ persona, onSubmit, onClose }) => {
               />
             </div>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Model ID *
-              </label>
-              <input
-                type="text"
-                name="model_id"
-                required
-                value={formData.model_id}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="e.g., gpt-4o, llama-3.3-70b-versatile"
-              />
-            </div>
 
             {/* Agent Selection Section */}
             <div className="border-t pt-6">
