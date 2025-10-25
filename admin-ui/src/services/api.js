@@ -158,6 +158,14 @@ export const userRoleAPI = {
   },
 };
 
+// Models API
+export const modelsAPI = {
+  getAll: async () => {
+    const response = await api.get('/api/models');
+    return response.data;
+  }
+};
+
 // Agent API
 export const agentAPI = {
   // Get all agents

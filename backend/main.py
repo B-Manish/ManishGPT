@@ -37,6 +37,7 @@ from typing import List
 from datetime import datetime
 from services.agno_team_service import agno_team_service
 from services.file_service import file_service
+from services.model_service import model_service
 
 
 
@@ -1900,6 +1901,24 @@ async def get_conversation_logs(conversation_id: int):
         }
     finally:
         db.close()
+
+@app.get("/api/models")
+async def get_available_models():
+    """Get all available models from all providers"""
+    try:
+        models = model_service.get_all_models()
+        return {
+            "success": True,
+            "data": models,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "data": model_service.get_all_models(),  # Return fallback data
+            "timestamp": datetime.utcnow().isoformat()
+        }
 
 if __name__ == "__main__":
     import uvicorn

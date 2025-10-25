@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { agentAPI, toolAPI } from '../services/api';
+import { agentAPI, toolAPI, modelsAPI } from '../services/api';
 import ModelSelector from './ModelSelector';
 
 const AgentEditModal = ({ agent, isOpen, onClose, onAgentUpdate }) => {
@@ -12,6 +12,7 @@ const AgentEditModal = ({ agent, isOpen, onClose, onAgentUpdate }) => {
     tool_names: []
   });
   const [availableTools, setAvailableTools] = useState([]);
+  const [modelOptions, setModelOptions] = useState({ openai: [], groq: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -31,6 +32,7 @@ const AgentEditModal = ({ agent, isOpen, onClose, onAgentUpdate }) => {
   useEffect(() => {
     if (isOpen) {
       loadTools();
+      loadModels();
     }
   }, [isOpen]);
 
@@ -40,6 +42,21 @@ const AgentEditModal = ({ agent, isOpen, onClose, onAgentUpdate }) => {
       setAvailableTools(toolsData);
     } catch (err) {
       console.error('Error loading tools:', err);
+    }
+  };
+
+  const loadModels = async () => {
+    try {
+      const response = await modelsAPI.getAll();
+      if (response.success) {
+        const { data } = response;
+        setModelOptions({
+          openai: data.openai?.models || [],
+          groq: data.groq?.models || []
+        });
+      }
+    } catch (err) {
+      console.error('Error loading models:', err);
     }
   };
 
@@ -145,22 +162,8 @@ const AgentEditModal = ({ agent, isOpen, onClose, onAgentUpdate }) => {
               modelProvider={formData.model_provider}
               modelId={formData.model_id}
               onProviderChange={(provider) => {
-                // Get the first model for the new provider
-                const modelOptions = {
-                  openai: [
-                    { value: 'gpt-4o', label: 'GPT-4o' },
-                    { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-                    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-                    { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' }
-                  ],
-                  groq: [
-                    { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B Versatile' },
-                    { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant' },
-                    { value: 'llama-3.1-70b-versatile', label: 'Llama 3.1 70B Versatile' },
-                    { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B' }
-                  ]
-                };
-                const firstModel = modelOptions[provider]?.[0]?.value;
+                // Get the first model for the new provider from API data
+                const firstModel = modelOptions[provider]?.[0]?.id;
                 setFormData({
                   ...formData, 
                   model_provider: provider,
