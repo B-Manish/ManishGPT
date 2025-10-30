@@ -17,7 +17,7 @@ import json
 from models import Persona, Agent as AgentModel, Tool
 from tools.registry import get_tools
 
-load_dotenv("config.env")
+load_dotenv()
 
 
 class AgnoTeamService:

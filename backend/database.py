@@ -3,7 +3,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 import os
 from dotenv import load_dotenv
 
-load_dotenv("config.env")
+load_dotenv()
 
 # PostgreSQL connection string
 DATABASE_URL = os.getenv(

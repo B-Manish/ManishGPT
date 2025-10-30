@@ -42,7 +42,7 @@ from services.model_service import model_service
 
 
 
-load_dotenv("config.env")
+load_dotenv()
 
 # Timezone configuration
 IST = pytz.timezone('Asia/Kolkata')

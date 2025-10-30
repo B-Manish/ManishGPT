@@ -8,7 +8,7 @@ from sqlalchemy import pool
 from alembic import context
 
 # Load environment variables
-load_dotenv("config.env")
+load_dotenv()
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

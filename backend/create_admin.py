@@ -25,7 +25,7 @@ def create_admin_user():
     """Create the first admin user"""
     
     # Load environment variables
-    load_dotenv("config.env")
+    load_dotenv()
     
     # Create tables if they don't exist
     Base.metadata.create_all(bind=engine)
@@ -112,7 +112,7 @@ def create_default_admin():
     """Create a default admin user with predefined credentials"""
     
     # Load environment variables
-    load_dotenv("config.env")
+    load_dotenv()
     
     # Create tables if they don't exist
     Base.metadata.create_all(bind=engine)
