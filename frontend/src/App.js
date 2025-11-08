@@ -5,6 +5,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./components/Login";
 import Sidebar from "./components/Sidebar";
 import Chat from "./components/Chat";
+import ChatPage from "./components/ChatPage";
 
 function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -18,6 +19,14 @@ function App() {
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route
+            path="/chat-page"
+            element={
+              <ProtectedRoute>
+                <ChatPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/*" element={
             <ProtectedRoute>
               <div style={{ 

@@ -8,6 +8,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import SearchIcon from '@mui/icons-material/Search';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import LogoutIcon from '@mui/icons-material/Logout';
+import ChatIcon from '@mui/icons-material/Chat';
 import { useAuth } from '../contexts/AuthContext';
 import { userAPI } from '../services/api';
 
@@ -224,6 +225,23 @@ function Sidebar({ isCollapsed, onToggle }) {
           <ChevronRightIcon style={{ fontSize: "20px" }} />
         </button>
         
+        <button onClick={() => navigate('/chat-page')} style={{
+          backgroundColor: "transparent",
+          border: "none",
+          color: "white",
+          cursor: "pointer",
+          padding: "12px 16px",
+          borderRadius: "8px",
+          marginBottom: "8px",
+          transition: "all 0.2s ease",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "20px",
+        }} title="Chat Page">
+          <ChatIcon style={{ fontSize: "18px" }} />
+        </button>
+        
         <button onClick={() => personas.length > 0 && startNewChat(personas[0].id)} style={{
           backgroundColor: "transparent",
           border: "none",
@@ -359,6 +377,33 @@ function Sidebar({ isCollapsed, onToggle }) {
           {user?.email}
         </div>
       </div>
+
+      {/* Chat Page Button */}
+      <button
+        onClick={() => navigate('/chat-page')}
+        style={{
+          backgroundColor: "#3b82f6",
+          border: "none",
+          color: "white",
+          cursor: "pointer",
+          padding: "10px 12px",
+          borderRadius: "8px",
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          fontSize: "14px",
+          fontWeight: "500",
+          transition: "all 0.2s ease",
+          textAlign: "left",
+          width: "100%",
+          marginBottom: "20px",
+        }}
+        onMouseEnter={(e) => e.target.style.backgroundColor = "#2563eb"}
+        onMouseLeave={(e) => e.target.style.backgroundColor = "#3b82f6"}
+      >
+        <ChatIcon style={{ fontSize: "18px", flexShrink: 0 }} />
+        <span>Chat Page</span>
+      </button>
 
       {/* Assigned Personas */}
       <div style={{
