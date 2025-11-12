@@ -61,10 +61,23 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    # Get database URL from environment or config
+    database_url = os.getenv("DATABASE_URL") or "postgresql://postgres:manish@localhost:5432/manishgpt"
+    
+    # Validate that the URL includes a database name
+    if database_url and "/" in database_url:
+        # Ensure the URL has a database name (after the last /)
+        parts = database_url.rsplit("/", 1)
+        if len(parts) == 2 and not parts[1] or parts[1].split("?")[0].strip() == "":
+            raise ValueError(
+                "Database URL must include a database name. "
+                "Example: postgresql://user:pass@localhost:5432/manishgpt"
+            )
+    
     # Override the sqlalchemy.url with environment variable if available
     configuration = config.get_section(config.config_ini_section, {})
-    if "DATABASE_URL" in os.environ:
-        configuration["sqlalchemy.url"] = os.environ["DATABASE_URL"]
+    if database_url:
+        configuration["sqlalchemy.url"] = database_url
     
     connectable = engine_from_config(
         configuration,
@@ -73,8 +86,11 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        # Ensure we're connected to the correct database
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, 
+            target_metadata=target_metadata,
+            version_table_schema=None,  # Use default schema (public)
         )
 
         with context.begin_transaction():

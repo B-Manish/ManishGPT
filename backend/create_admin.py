@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from database import SessionLocal, engine
-from models import User, Base
+from models import User, UserRole, Base
 import bcrypt
 
 def hash_password(password: str) -> str:
@@ -34,8 +34,14 @@ def create_admin_user():
     db = SessionLocal()
     
     try:
+        # Get admin role
+        admin_role = db.query(UserRole).filter(UserRole.name == "admin").first()
+        if not admin_role:
+            print("❌ Admin role not found! Please run migrations first.")
+            return False
+        
         # Check if any admin users already exist
-        existing_admin = db.query(User).filter(User.role == "admin").first()
+        existing_admin = db.query(User).filter(User.role_id == admin_role.id).first()
         if existing_admin:
             print(f"❌ Admin user already exists: {existing_admin.email}")
             print("   If you want to create another admin, please do it through the API.")
@@ -76,7 +82,7 @@ def create_admin_user():
             email=email,
             username=username,
             hashed_password=hashed_password,
-            role="admin",
+            role_id=admin_role.id,
             is_active=True
         )
         
@@ -88,7 +94,7 @@ def create_admin_user():
         print("=" * 50)
         print(f"📧 Email: {admin_user.email}")
         print(f"👤 Username: {admin_user.username}")
-        print(f"🔑 Role: {admin_user.role}")
+        print(f"🔑 Role: {admin_user.user_role.name}")
         print(f"🆔 User ID: {admin_user.id}")
         print(f"📅 Created: {admin_user.created_at}")
         print("=" * 50)
@@ -121,8 +127,14 @@ def create_default_admin():
     db = SessionLocal()
     
     try:
+        # Get admin role
+        admin_role = db.query(UserRole).filter(UserRole.name == "admin").first()
+        if not admin_role:
+            print("❌ Admin role not found! Please run migrations first.")
+            return False
+        
         # Check if any admin users already exist
-        existing_admin = db.query(User).filter(User.role == "admin").first()
+        existing_admin = db.query(User).filter(User.role_id == admin_role.id).first()
         if existing_admin:
             print(f"✅ Admin user already exists: {existing_admin.email}")
             return True
@@ -148,7 +160,7 @@ def create_default_admin():
             email=email,
             username=username,
             hashed_password=hashed_password,
-            role="admin",
+            role_id=admin_role.id,
             is_active=True
         )
         
@@ -161,7 +173,7 @@ def create_default_admin():
         print(f"📧 Email: {admin_user.email}")
         print(f"👤 Username: {admin_user.username}")
         print(f"🔑 Password: {password}")
-        print(f"🔑 Role: {admin_user.role}")
+        print(f"🔑 Role: {admin_user.user_role.name}")
         print(f"🆔 User ID: {admin_user.id}")
         print("=" * 50)
         print("⚠️  IMPORTANT: Change the default password after first login!")

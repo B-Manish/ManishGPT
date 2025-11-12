@@ -137,17 +137,8 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_conversation_analytics_id'), 'conversation_analytics', ['id'], unique=False)
     
-    # Create a default admin user
-    op.execute("""
-        INSERT INTO users (email, username, hashed_password, role, is_active, created_at, updated_at)
-        VALUES ('admin@manishgpt.com', 'admin', 'default_password_hash', 'admin', true, NOW(), NOW())
-    """)
-    
-    # Create a default persona
-    op.execute("""
-        INSERT INTO personas (name, description, instructions, model_provider, model_id, is_active, created_by_admin_id, created_at, updated_at)
-        VALUES ('Default Persona', 'Default persona for existing conversations', 'You are a helpful AI assistant.', 'openai', 'gpt-4o', true, 1, NOW(), NOW())
-    """)
+    # Note: Default admin user and persona should be created using create_admin.py script
+    # This ensures proper password hashing and role assignment
     
     # Add nullable columns to existing conversations table first
     op.add_column('conversations', sa.Column('user_id', sa.Integer(), nullable=True))
@@ -155,12 +146,23 @@ def upgrade() -> None:
     op.add_column('conversations', sa.Column('status', sa.String(), nullable=True))
     op.add_column('conversations', sa.Column('updated_at', sa.DateTime(), nullable=True))
     
-    # Update existing conversations with default values
-    op.execute("UPDATE conversations SET user_id = 1, persona_id = 1, status = 'active', updated_at = NOW() WHERE user_id IS NULL")
+    # Update existing conversations with default values (only if users and personas exist)
+    # If no users/personas exist, these will remain NULL until created
+    # Note: user_id and persona_id will be made NOT NULL in a later migration
+    # after users and personas are created via the admin script
+    op.execute("""
+        UPDATE conversations 
+        SET user_id = (SELECT id FROM users LIMIT 1),
+            persona_id = (SELECT id FROM personas LIMIT 1),
+            status = 'active',
+            updated_at = NOW()
+        WHERE user_id IS NULL 
+        AND EXISTS (SELECT 1 FROM users LIMIT 1)
+        AND EXISTS (SELECT 1 FROM personas LIMIT 1)
+    """)
     
-    # Now make the columns NOT NULL
-    op.alter_column('conversations', 'user_id', nullable=False)
-    op.alter_column('conversations', 'persona_id', nullable=False)
+    # Keep columns nullable for now - they will be set to NOT NULL after users/personas are created
+    # This allows the migration to succeed even if no users/personas exist yet
     
     # Add foreign key constraints
     op.create_foreign_key('fk_conversations_user_id', 'conversations', 'users', ['user_id'], ['id'])
