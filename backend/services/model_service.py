@@ -34,19 +34,26 @@ class ModelService:
                 models_data = response.json()
                 available_models = []
                 
-                # Filter for chat models only
-                chat_models = [
+                # Filter for specific chat models only (excluding gpt-4o-2024-05-13)
+                allowed_models = [
+                    'gpt-5.1',
+                    'gpt-5',
+                    'gpt-5-mini',
+                    'gpt-5-nano',
+                    'gpt-5-pro',
+                    'gpt-4.1',
+                    'gpt-4.1-mini',
+                    'gpt-4.1-nano',
                     'gpt-4o',
-                    'gpt-4o-mini', 
-                    'gpt-4-turbo',
-                    'gpt-4-turbo-preview',
-                    'gpt-3.5-turbo',
-                    'gpt-3.5-turbo-16k'
+                    'gpt-4o-mini'
                 ]
+                
+                excluded_models = ['gpt-4o-2024-05-13']
                 
                 for model in models_data.get('data', []):
                     model_id = model.get('id', '')
-                    if any(chat_model in model_id for chat_model in chat_models):
+                    # Check if model is in allowed list and not in excluded list
+                    if model_id in allowed_models and model_id not in excluded_models:
                         available_models.append({
                             'id': model_id,
                             'name': self._format_model_name(model_id),
@@ -121,12 +128,16 @@ class ModelService:
     def _format_model_name(self, model_id: str) -> str:
         """Format model ID into a readable name"""
         name_mapping = {
+            'gpt-5.1': 'GPT-5.1',
+            'gpt-5': 'GPT-5',
+            'gpt-5-mini': 'GPT-5 Mini',
+            'gpt-5-nano': 'GPT-5 Nano',
+            'gpt-5-pro': 'GPT-5 Pro',
+            'gpt-4.1': 'GPT-4.1',
+            'gpt-4.1-mini': 'GPT-4.1 Mini',
+            'gpt-4.1-nano': 'GPT-4.1 Nano',
             'gpt-4o': 'GPT-4o',
             'gpt-4o-mini': 'GPT-4o Mini',
-            'gpt-4-turbo': 'GPT-4 Turbo',
-            'gpt-4-turbo-preview': 'GPT-4 Turbo Preview',
-            'gpt-3.5-turbo': 'GPT-3.5 Turbo',
-            'gpt-3.5-turbo-16k': 'GPT-3.5 Turbo 16K',
             'llama-3.3-70b-versatile': 'Llama 3.3 70B Versatile',
             'llama-3.1-8b-instant': 'Llama 3.1 8B Instant',
             'llama-3.1-70b-versatile': 'Llama 3.1 70B Versatile',
@@ -140,10 +151,16 @@ class ModelService:
     def _get_openai_fallback_models(self) -> List[Dict]:
         """Fallback OpenAI models when API is unavailable"""
         return [
+            {'id': 'gpt-5.1', 'name': 'GPT-5.1', 'available': True, 'provider': 'openai'},
+            {'id': 'gpt-5', 'name': 'GPT-5', 'available': True, 'provider': 'openai'},
+            {'id': 'gpt-5-mini', 'name': 'GPT-5 Mini', 'available': True, 'provider': 'openai'},
+            {'id': 'gpt-5-nano', 'name': 'GPT-5 Nano', 'available': True, 'provider': 'openai'},
+            {'id': 'gpt-5-pro', 'name': 'GPT-5 Pro', 'available': True, 'provider': 'openai'},
+            {'id': 'gpt-4.1', 'name': 'GPT-4.1', 'available': True, 'provider': 'openai'},
+            {'id': 'gpt-4.1-mini', 'name': 'GPT-4.1 Mini', 'available': True, 'provider': 'openai'},
+            {'id': 'gpt-4.1-nano', 'name': 'GPT-4.1 Nano', 'available': True, 'provider': 'openai'},
             {'id': 'gpt-4o', 'name': 'GPT-4o', 'available': True, 'provider': 'openai'},
-            {'id': 'gpt-4o-mini', 'name': 'GPT-4o Mini', 'available': True, 'provider': 'openai'},
-            {'id': 'gpt-4-turbo', 'name': 'GPT-4 Turbo', 'available': True, 'provider': 'openai'},
-            {'id': 'gpt-3.5-turbo', 'name': 'GPT-3.5 Turbo', 'available': True, 'provider': 'openai'}
+            {'id': 'gpt-4o-mini', 'name': 'GPT-4o Mini', 'available': True, 'provider': 'openai'}
         ]
     
     def _get_groq_fallback_models(self) -> List[Dict]:
