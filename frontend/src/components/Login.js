@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import { authAPI } from '../services/api';
 
@@ -9,9 +9,21 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [searchParams] = useSearchParams();
   
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  // Check for OAuth errors in URL
+  useEffect(() => {
+    const oauthError = searchParams.get('error');
+    const errorDescription = searchParams.get('error_description');
+    if (oauthError) {
+      setError(errorDescription || `OAuth error: ${oauthError}`);
+      // Clean up URL
+      navigate('/login', { replace: true });
+    }
+  }, [searchParams, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

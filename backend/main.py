@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 import asyncio
 import json
 from authlib.integrations.httpx_client import AsyncOAuth2Client
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote_plus
 
 
 from sqlalchemy.orm import Session
@@ -63,7 +63,7 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", f"{BACKEND_URL}/auth/google/callback")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3001")
 
 # Security
 security = HTTPBearer()
@@ -528,11 +528,13 @@ async def google_login():
             detail="Google OAuth is not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
         )
     
-    # Google OAuth authorization URL
+    # Google OAuth authorization URL - properly encode the redirect_uri
+    encoded_redirect_uri = quote_plus(GOOGLE_REDIRECT_URI)
+    
     google_oauth_url = (
         "https://accounts.google.com/o/oauth2/v2/auth?"
         f"client_id={GOOGLE_CLIENT_ID}&"
-        f"redirect_uri={GOOGLE_REDIRECT_URI}&"
+        f"redirect_uri={encoded_redirect_uri}&"
         "response_type=code&"
         "scope=openid email profile&"
         "access_type=offline&"
@@ -542,13 +544,31 @@ async def google_login():
     return {"auth_url": google_oauth_url}
 
 @app.get("/auth/google/callback")
-async def google_callback(code: str, db: Session = Depends(get_db)):
+async def google_callback(
+    request: Request,
+    code: Optional[str] = None,
+    error: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
     """Handle Google OAuth callback"""
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         raise HTTPException(
             status_code=500,
             detail="Google OAuth is not configured"
         )
+    
+    # Check for OAuth errors from Google
+    if error:
+        error_description = request.query_params.get("error_description", "Unknown error")
+        # Redirect to frontend with error
+        redirect_url = f"{FRONTEND_URL}/login?error={error}&error_description={error_description}"
+        return RedirectResponse(url=redirect_url)
+    
+    # Check if code is missing
+    if not code:
+        # Redirect to frontend with error
+        redirect_url = f"{FRONTEND_URL}/login?error=missing_code&error_description=Authorization code not received from Google"
+        return RedirectResponse(url=redirect_url)
     
     try:
         # Exchange authorization code for tokens
@@ -567,7 +587,7 @@ async def google_callback(code: str, db: Session = Depends(get_db)):
             # Get user info from Google
             user_info_response = await client.get(
                 "https://www.googleapis.com/oauth2/v2/userinfo",
-                token=access_token,
+                headers={"Authorization": f"Bearer {access_token}"}
             )
             user_info = user_info_response.json()
             
