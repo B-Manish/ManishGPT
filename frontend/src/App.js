@@ -3,6 +3,7 @@ import { useState } from "react";
 import { AuthProvider } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./components/Login";
+import OAuthCallback from "./components/OAuthCallback";
 import Sidebar from "./components/Sidebar";
 import Chat from "./components/Chat";
 
@@ -18,6 +19,7 @@ function App() {
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/auth/callback" element={<OAuthCallback />} />
           <Route path="/*" element={
             <ProtectedRoute>
               <div style={{ 

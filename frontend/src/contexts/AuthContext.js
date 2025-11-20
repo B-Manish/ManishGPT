@@ -53,6 +53,19 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const handleOAuthCallback = async (token) => {
+    try {
+      localStorage.setItem('userToken', token);
+      const userData = await authAPI.getMe();
+      setUser(userData);
+      setIsAuthenticated(true);
+    } catch (error) {
+      console.error('OAuth callback failed:', error);
+      localStorage.removeItem('userToken');
+      throw error;
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem('userToken');
     setUser(null);
@@ -65,6 +78,7 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated,
     login,
     logout,
+    handleOAuthCallback,
   };
 
   return (

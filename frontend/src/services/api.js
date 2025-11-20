@@ -61,6 +61,11 @@ export const authAPI = {
     return response.data;
   },
   
+  getGoogleAuthUrl: async () => {
+    const response = await api.get('/auth/google/login');
+    return response.data;
+  },
+  
   getMe: async () => {
     const response = await api.get('/auth/me');
     return response.data;

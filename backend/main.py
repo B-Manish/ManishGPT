@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request, Depends, HTTPException, status, UploadFile
 import re
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, RedirectResponse
 from pydantic import BaseModel, Field, EmailStr
 from agno.agent import Agent as AgnoAgent
 from agno.models.openai import OpenAIChat
@@ -16,6 +16,8 @@ import pytz
 from typing import Any, Dict, List, Optional
 import asyncio
 import json
+from authlib.integrations.httpx_client import AsyncOAuth2Client
+from urllib.parse import urlencode
 
 
 from sqlalchemy.orm import Session
@@ -55,6 +57,13 @@ def get_ist_time():
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 480  # 8 hours
+
+# Google OAuth configuration
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", f"{BACKEND_URL}/auth/google/callback")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 # Security
 security = HTTPBearer()
@@ -465,7 +474,22 @@ def login_user(user_credentials: UserLogin, db: Session = Depends(get_db)):
     """Login user and return access token"""
     user = db.query(User).filter(User.username == user_credentials.username).first()
     
-    if not user or not verify_password(user_credentials.password, user.hashed_password):
+    # Check if user exists
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect username or password"
+        )
+    
+    # Check if user is OAuth-only (no password)
+    if user.oauth_provider and not user.hashed_password:
+        raise HTTPException(
+            status_code=401,
+            detail="Please sign in with Google"
+        )
+    
+    # Verify password for local users
+    if not user.hashed_password or not verify_password(user_credentials.password, user.hashed_password):
         raise HTTPException(
             status_code=401,
             detail="Incorrect username or password"
@@ -493,6 +517,136 @@ async def refresh_token(current_user: User = Depends(get_current_user)):
     )
     
     return {"access_token": access_token, "token_type": "bearer"}
+
+# Google OAuth Endpoints
+@app.get("/auth/google/login")
+async def google_login():
+    """Initiate Google OAuth login"""
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        raise HTTPException(
+            status_code=500,
+            detail="Google OAuth is not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
+        )
+    
+    # Google OAuth authorization URL
+    google_oauth_url = (
+        "https://accounts.google.com/o/oauth2/v2/auth?"
+        f"client_id={GOOGLE_CLIENT_ID}&"
+        f"redirect_uri={GOOGLE_REDIRECT_URI}&"
+        "response_type=code&"
+        "scope=openid email profile&"
+        "access_type=offline&"
+        "prompt=consent"
+    )
+    
+    return {"auth_url": google_oauth_url}
+
+@app.get("/auth/google/callback")
+async def google_callback(code: str, db: Session = Depends(get_db)):
+    """Handle Google OAuth callback"""
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        raise HTTPException(
+            status_code=500,
+            detail="Google OAuth is not configured"
+        )
+    
+    try:
+        # Exchange authorization code for tokens
+        async with AsyncOAuth2Client(
+            client_id=GOOGLE_CLIENT_ID,
+            client_secret=GOOGLE_CLIENT_SECRET,
+        ) as client:
+            token_response = await client.fetch_token(
+                "https://oauth2.googleapis.com/token",
+                code=code,
+                redirect_uri=GOOGLE_REDIRECT_URI,
+            )
+            
+            access_token = token_response.get("access_token")
+            
+            # Get user info from Google
+            user_info_response = await client.get(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                token=access_token,
+            )
+            user_info = user_info_response.json()
+            
+            google_id = user_info.get("id")
+            email = user_info.get("email")
+            name = user_info.get("name", "")
+            picture = user_info.get("picture", "")
+            
+            if not google_id or not email:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Failed to retrieve user information from Google"
+                )
+            
+            # Check if user exists by Google ID
+            user = db.query(User).filter(User.google_id == google_id).first()
+            
+            # If not found, check by email
+            if not user:
+                user = db.query(User).filter(User.email == email).first()
+                
+                # If user exists with email but no Google ID, link the account
+                if user:
+                    user.google_id = google_id
+                    user.oauth_provider = "google"
+                    db.commit()
+                    db.refresh(user)
+                else:
+                    # Create new user
+                    # Get default role (assuming role_id=2 is 'user', adjust as needed)
+                    default_role = db.query(UserRole).filter(UserRole.name == "user").first()
+                    if not default_role:
+                        raise HTTPException(
+                            status_code=500,
+                            detail="Default user role not found"
+                        )
+                    
+                    # Generate username from email
+                    username_base = email.split("@")[0]
+                    username = username_base
+                    counter = 1
+                    while db.query(User).filter(User.username == username).first():
+                        username = f"{username_base}{counter}"
+                        counter += 1
+                    
+                    user = User(
+                        email=email,
+                        username=username,
+                        google_id=google_id,
+                        oauth_provider="google",
+                        hashed_password=None,  # OAuth users don't have passwords
+                        role_id=default_role.id,
+                        is_active=True
+                    )
+                    db.add(user)
+                    db.commit()
+                    db.refresh(user)
+            
+            if not user.is_active:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Account is deactivated"
+                )
+            
+            # Generate JWT token
+            access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+            jwt_token = create_access_token(
+                data={"sub": str(user.id)}, expires_delta=access_token_expires
+            )
+            
+            # Redirect to frontend with token
+            redirect_url = f"{FRONTEND_URL}/auth/callback?token={jwt_token}"
+            return RedirectResponse(url=redirect_url)
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"OAuth authentication failed: {str(e)}"
+        )
 
 @app.get("/auth/me", response_model=UserResponse)
 def get_current_user_info(current_user: User = Depends(get_current_user)):

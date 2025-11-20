@@ -20,7 +20,9 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     username = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=True)  # Nullable for OAuth users
+    google_id = Column(String, unique=True, index=True, nullable=True)  # Google OAuth ID
+    oauth_provider = Column(String, nullable=True)  # 'google', 'local', etc.
     role_id = Column(Integer, ForeignKey("user_roles.id"), nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
