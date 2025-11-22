@@ -470,11 +470,14 @@ function Sidebar({ isCollapsed, onToggle }) {
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  opacity: 0,
+                  opacity: 0.5,
                   transition: "opacity 0.2s",
-                  marginLeft: "4px"
+                  marginLeft: "4px",
+                  padding: "4px",
+                  borderRadius: "4px",
                 }}
-                className="group-hover-visible"
+                onMouseEnter={(e) => e.currentTarget.style.opacity = "1"}
+                onMouseLeave={(e) => e.currentTarget.style.opacity = "0.5"}
                 onClick={(e) => {
                   e.stopPropagation();
                   handleContextMenu(e, c.id);
@@ -584,8 +587,6 @@ function Sidebar({ isCollapsed, onToggle }) {
       </div>
 
       <style>{`
-        .group-hover-visible { opacity: 0; }
-        div:hover > .group-hover-visible { opacity: 1; }
       `}</style>
     </div>
   );
