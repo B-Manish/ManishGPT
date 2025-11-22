@@ -5,6 +5,7 @@ import UserManagement from './UserManagement';
 import ToolsManagement from './ToolsManagement';
 import AgentsManagement from './AgentsManagement';
 import LogsViewer from './LogsViewer';
+import LLMPricing from './LLMPricing';
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
@@ -15,6 +16,7 @@ const Dashboard = () => {
     { id: 'agents', name: 'Agents', icon: '👤' },
     { id: 'users', name: 'Users', icon: '👥' },
     { id: 'tools', name: 'Tools', icon: '🔧' },
+    { id: 'pricing', name: 'LLM Pricing', icon: '💰' },
     { id: 'logs', name: 'Logs', icon: '📋' },
   ];
 
@@ -28,6 +30,8 @@ const Dashboard = () => {
         return <UserManagement />;
       case 'tools':
         return <ToolsManagement />;
+      case 'pricing':
+        return <LLMPricing />;
       case 'logs':
         return <LogsViewer />;
       default:
