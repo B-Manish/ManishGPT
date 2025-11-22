@@ -22,18 +22,19 @@ function App() {
           <Route path="/auth/callback" element={<OAuthCallback />} />
           <Route path="/*" element={
             <ProtectedRoute>
-              <div style={{ 
-                display: "flex", 
+              <div style={{
+                display: "flex",
                 height: "100vh",
                 backgroundColor: "#1e1e20"
               }}>
                 <Sidebar isCollapsed={isSidebarCollapsed} onToggle={toggleSidebar} />
-                <div style={{ 
-                  marginLeft: isSidebarCollapsed ? 60 : 250, 
+                <div style={{
+                  marginLeft: isSidebarCollapsed ? 60 : 250,
                   flex: 1,
                   transition: "margin-left 0.3s ease",
                 }}>
                   <Routes>
+                    <Route path="/chat/persona/:id" element={<Chat isSidebarCollapsed={isSidebarCollapsed} />} />
                     <Route path="/chat/:id" element={<Chat isSidebarCollapsed={isSidebarCollapsed} />} />
                     <Route path="*" element={<Chat isSidebarCollapsed={isSidebarCollapsed} />} />
                   </Routes>

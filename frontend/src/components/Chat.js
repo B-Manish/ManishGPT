@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useLocation } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -7,6 +7,7 @@ import { userAPI } from '../services/api';
 
 function Chat({ isSidebarCollapsed }) {
   const { id } = useParams();
+  const location = useLocation();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,9 +24,11 @@ function Chat({ isSidebarCollapsed }) {
   // Check if id is a persona route or conversation route
   useEffect(() => {
     if (id) {
-      if (id.startsWith('persona/')) {
-        // Extract persona ID from route like "persona/123"
-        const extractedPersonaId = id.replace('persona/', '');
+      const isPersonaRoute = location.pathname.includes('/chat/persona/');
+
+      if (isPersonaRoute || id.startsWith('persona/')) {
+        // Extract persona ID from route
+        const extractedPersonaId = id.startsWith('persona/') ? id.replace('persona/', '') : id;
         setPersonaId(extractedPersonaId);
         setConversationId(null);
         setMessages([]); // Clear messages for new persona chat
@@ -69,7 +72,7 @@ function Chat({ isSidebarCollapsed }) {
 
   const handleSend = async () => {
     if (!input.trim()) return;
-    
+
     // If no conversation ID and no persona ID, show message to select a persona first
     if (!conversationId && !personaId) {
       alert("Please select a persona from the sidebar to start chatting.");
@@ -166,7 +169,7 @@ function Chat({ isSidebarCollapsed }) {
       console.error('Error sending message:', error);
       // Remove the user message if sending failed
       setMessages((prev) => prev.slice(0, -2)); // Remove both user and assistant messages
-      
+
       // Add error message
       const errorMsg = {
         role: "assistant",
@@ -189,7 +192,7 @@ function Chat({ isSidebarCollapsed }) {
     const date = new Date(timestamp);
     const now = new Date();
     const diffInHours = (now - date) / (1000 * 60 * 60);
-    
+
     if (diffInHours < 24) {
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } else {
@@ -200,7 +203,7 @@ function Chat({ isSidebarCollapsed }) {
   const addReaction = (messageIndex, reaction) => {
     setMessageReactions(prev => {
       const currentReactions = prev[messageIndex] || [];
-      
+
       // Check if this reaction already exists
       if (currentReactions.includes(reaction)) {
         // Remove the reaction if it already exists
@@ -252,7 +255,7 @@ function Chat({ isSidebarCollapsed }) {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      
+
       const response = await userAPI.uploadFile(formData);
       setUploadedFiles(prev => [...prev, response]);
     } catch (error) {
@@ -268,7 +271,7 @@ function Chat({ isSidebarCollapsed }) {
     code({ node, inline, className, children, ...props }) {
       const match = /language-(\w+)/.exec(className || '');
       const codeString = String(children).replace(/\n$/, '');
-      
+
       // Create unique identifier for each code block
       const uniqueId = `${props.messageIndex}-${props.codeBlockIndex || 0}`;
 
@@ -290,7 +293,7 @@ function Chat({ isSidebarCollapsed }) {
             >
               {codeString}
             </SyntaxHighlighter>
-            
+
             {/* Copy Button */}
             <button
               onClick={() => copyToClipboard(codeString, uniqueId)}
@@ -325,14 +328,14 @@ function Chat({ isSidebarCollapsed }) {
               {copiedCode === uniqueId ? (
                 <>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                   </svg>
                   Copied!
                 </>
               ) : (
                 <>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
                   </svg>
                   Copy
                 </>
@@ -407,12 +410,12 @@ function Chat({ isSidebarCollapsed }) {
           </span>
         </div>
       )}
-      <div style={{ 
-        width: '1000px', 
+      <div style={{
+        width: '1000px',
         maxWidth: '1000px',
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center' 
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center'
       }}>
         <div style={{ fontSize: '28px', marginBottom: '25px' }}>Where should we begin?</div>
         <div style={{
@@ -439,7 +442,7 @@ function Chat({ isSidebarCollapsed }) {
               outline: "none",
             }}
           />
-          
+
           {/* File Upload Button for Welcome Screen */}
           <input
             type="file"
@@ -469,7 +472,7 @@ function Chat({ isSidebarCollapsed }) {
           >
             {isUploading ? "⏳" : "📎"}
           </label>
-          
+
           <button
             onClick={handleSend}
             style={{
@@ -486,7 +489,7 @@ function Chat({ isSidebarCollapsed }) {
             ➤
           </button>
         </div>
-        
+
         {/* File Preview Area for Welcome Screen */}
         {uploadedFiles.length > 0 && (
           <div style={{
@@ -579,19 +582,19 @@ function Chat({ isSidebarCollapsed }) {
             </span>
           </div>
         )}
-        <div style={{ 
-          width: '100%', 
+        <div style={{
+          width: '100%',
           minHeight: '100%',
-          display: 'flex', 
+          display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           paddingBottom: "120px", // Ensure content doesn't go behind search bar
         }}>
           {/* Content Area - No internal scrolling */}
-          <div style={{ 
+          <div style={{
             width: '1000px',
             maxWidth: '1000px',
-            flex: 1, 
+            flex: 1,
             padding: "20px",
             display: "flex",
             flexDirection: "column",
@@ -603,22 +606,22 @@ function Chat({ isSidebarCollapsed }) {
               let codeBlockIndex = 0; // Track code blocks within this message
               const isHovered = hoveredMessage === i;
               const reactions = messageReactions[i] || [];
-              
+
               return (
-                <div 
-                  key={i} 
+                <div
+                  key={i}
                   style={{
                     marginBottom: "16px",
                     marginTop: "0px", // Fixed margin - no more movement
                     padding: "12px 16px",
                     borderRadius: "18px",
-                  backgroundColor: m.role === "user" ? "#343541" : "#171717",
-                  color: "white",
-                  width: "fit-content",
-                  maxWidth: "75%",
-                  alignSelf: m.role === "user" ? "flex-end" : "flex-start",
-                  marginLeft: m.role === "user" ? "auto" : undefined,
-                  marginRight: m.role === "assistant" ? "auto" : undefined,
+                    backgroundColor: m.role === "user" ? "#343541" : "#171717",
+                    color: "white",
+                    width: "fit-content",
+                    maxWidth: "75%",
+                    alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+                    marginLeft: m.role === "user" ? "auto" : undefined,
+                    marginRight: m.role === "assistant" ? "auto" : undefined,
                     boxShadow: isHovered ? "0 4px 16px rgba(0,0,0,0.25)" : "0 2px 8px rgba(0,0,0,0.15)",
                     transition: "all 0.2s ease",
                     position: "relative",
@@ -660,7 +663,7 @@ function Chat({ isSidebarCollapsed }) {
                       ))}
                     </div>
                   )}
-                  
+
                   {/* Message Header */}
                   <div style={{
                     display: "flex",
@@ -685,7 +688,7 @@ function Chat({ isSidebarCollapsed }) {
                         {formatTimestamp(m.timestamp)}
                       </span>
                     </div>
-                    
+
                     {/* Copy Button Container - Always reserves space */}
                     <div style={{
                       width: "26px", // Fixed width to prevent jumping
@@ -741,21 +744,21 @@ function Chat({ isSidebarCollapsed }) {
                   </div>
                   {/* Message Content */}
                   <div style={{ lineHeight: "1.6" }}>
-                  <ReactMarkdown 
-                    components={{
-                      ...components,
-                      code: (props) => {
-                        const result = components.code({ 
-                          ...props, 
-                          messageIndex: i,
-                          codeBlockIndex: codeBlockIndex++
-                        });
-                        return result;
-                      }
-                    }}
-                  >
-                    {m.content}
-                  </ReactMarkdown>
+                    <ReactMarkdown
+                      components={{
+                        ...components,
+                        code: (props) => {
+                          const result = components.code({
+                            ...props,
+                            messageIndex: i,
+                            codeBlockIndex: codeBlockIndex++
+                          });
+                          return result;
+                        }
+                      }}
+                    >
+                      {m.content}
+                    </ReactMarkdown>
                   </div>
                 </div>
               );
@@ -862,7 +865,7 @@ function Chat({ isSidebarCollapsed }) {
                 transition: "opacity 0.2s ease"
               }}
             />
-            
+
             {/* File Upload Button */}
             <input
               type="file"
@@ -892,7 +895,7 @@ function Chat({ isSidebarCollapsed }) {
             >
               {isUploading ? "⏳" : "📎"}
             </label>
-            
+
             <button
               onClick={handleSend}
               disabled={loading || !input.trim()}
@@ -915,13 +918,13 @@ function Chat({ isSidebarCollapsed }) {
               onMouseEnter={(e) => {
                 if (!loading && input.trim()) {
                   e.target.style.backgroundColor = "#0d8a6b";
-                e.target.style.transform = "scale(1.05)";
+                  e.target.style.transform = "scale(1.05)";
                 }
               }}
               onMouseLeave={(e) => {
                 if (!loading && input.trim()) {
                   e.target.style.backgroundColor = "#10a37f";
-                e.target.style.transform = "scale(1)";
+                  e.target.style.transform = "scale(1)";
                 }
               }}
             >
