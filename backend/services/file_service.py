@@ -31,8 +31,11 @@ class FileService:
             if not self.client.bucket_exists(self.bucket_name):
                 self.client.make_bucket(self.bucket_name)
                 print(f"Created bucket: {self.bucket_name}")
-        except S3Error as e:
-            print(f"Error creating bucket: {e}")
+        except (S3Error, Exception) as e:
+            # Handle both S3 errors and connection errors gracefully
+            # This allows the app to start even if MinIO is not available
+            print(f"Warning: Could not connect to MinIO or create bucket '{self.bucket_name}': {e}")
+            print("The application will start, but file operations may fail until MinIO is available.")
     
     def upload_file(self, file_data: BinaryIO, filename: str, content_type: str) -> dict:
         """Upload file to MinIO and return file info"""
