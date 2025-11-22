@@ -1,8 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import SendIcon from '@mui/icons-material/Send';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckIcon from '@mui/icons-material/Check';
+import PsychologyIcon from '@mui/icons-material/Psychology';
+import PersonIcon from '@mui/icons-material/Person';
 import { userAPI } from '../services/api';
 
 function Chat({ isSidebarCollapsed }) {
@@ -20,6 +26,15 @@ function Chat({ isSidebarCollapsed }) {
   const [personaId, setPersonaId] = useState(null);
   const [conversationId, setConversationId] = useState(null);
   const [personaName, setPersonaName] = useState(null);
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   // Check if id is a persona route or conversation route
   useEffect(() => {
@@ -56,7 +71,7 @@ function Chat({ isSidebarCollapsed }) {
       setPersonaName(null);
       setMessages([]);
     }
-  }, [id]);
+  }, [id, location.pathname]);
 
   const fetchPersonaName = async (personaId) => {
     try {
@@ -200,27 +215,6 @@ function Chat({ isSidebarCollapsed }) {
     }
   };
 
-  const addReaction = (messageIndex, reaction) => {
-    setMessageReactions(prev => {
-      const currentReactions = prev[messageIndex] || [];
-
-      // Check if this reaction already exists
-      if (currentReactions.includes(reaction)) {
-        // Remove the reaction if it already exists
-        return {
-          ...prev,
-          [messageIndex]: currentReactions.filter(r => r !== reaction)
-        };
-      } else {
-        // Add the reaction if it doesn't exist
-        return {
-          ...prev,
-          [messageIndex]: [...currentReactions, reaction]
-        };
-      }
-    });
-  };
-
   const copyToClipboard = async (code, uniqueId) => {
     try {
       await navigator.clipboard.writeText(code);
@@ -271,668 +265,475 @@ function Chat({ isSidebarCollapsed }) {
     code({ node, inline, className, children, ...props }) {
       const match = /language-(\w+)/.exec(className || '');
       const codeString = String(children).replace(/\n$/, '');
-
-      // Create unique identifier for each code block
       const uniqueId = `${props.messageIndex}-${props.codeBlockIndex || 0}`;
 
       if (!inline && match) {
         return (
-          <div style={{ position: 'relative' }}>
+          <div style={{ position: 'relative', margin: "16px 0" }}>
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: "#282c34",
+              padding: "8px 16px",
+              borderTopLeftRadius: "8px",
+              borderTopRightRadius: "8px",
+              fontSize: "12px",
+              color: "#abb2bf",
+              borderBottom: "1px solid rgba(255,255,255,0.1)"
+            }}>
+              <span>{match[1]}</span>
+              <button
+                onClick={() => copyToClipboard(codeString, uniqueId)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: copiedCode === uniqueId ? "var(--success)" : "inherit",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  fontSize: "12px",
+                }}
+              >
+                {copiedCode === uniqueId ? <CheckIcon style={{ fontSize: 14 }} /> : <ContentCopyIcon style={{ fontSize: 14 }} />}
+                {copiedCode === uniqueId ? "Copied!" : "Copy code"}
+              </button>
+            </div>
             <SyntaxHighlighter
               style={oneDark}
               language={match[1]}
               PreTag="div"
               customStyle={{
                 margin: 0,
-                borderRadius: "8px",
+                borderBottomLeftRadius: "8px",
+                borderBottomRightRadius: "8px",
                 fontSize: "14px",
-                lineHeight: "1.4",
-                paddingTop: "40px", // Space for copy button
+                lineHeight: "1.5",
+                padding: "16px",
               }}
               {...props}
             >
               {codeString}
             </SyntaxHighlighter>
-
-            {/* Copy Button */}
-            <button
-              onClick={() => copyToClipboard(codeString, uniqueId)}
-              style={{
-                position: 'absolute',
-                top: '8px',
-                right: '8px',
-                backgroundColor: copiedCode === uniqueId ? '#10b981' : '#40414f',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '6px 12px',
-                fontSize: '12px',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                zIndex: 10,
-              }}
-              onMouseEnter={(e) => {
-                if (copiedCode !== uniqueId) {
-                  e.target.style.backgroundColor = '#565869';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (copiedCode !== uniqueId) {
-                  e.target.style.backgroundColor = '#40414f';
-                }
-              }}
-            >
-              {copiedCode === uniqueId ? (
-                <>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                  </svg>
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
-                  </svg>
-                  Copy
-                </>
-              )}
-            </button>
           </div>
         );
       } else {
         return (
           <code className={className} {...props} style={{
-            backgroundColor: "#40414f",
+            background: "rgba(255,255,255,0.1)",
             padding: "2px 6px",
             borderRadius: "4px",
-            fontSize: "14px",
-            color: "#e3e3e3",
+            fontSize: "0.9em",
+            fontFamily: "JetBrains Mono, monospace",
           }}>
             {children}
           </code>
         );
       }
     },
-    pre({ children, ...props }) {
-      return (
-        <pre style={{ margin: 0 }} {...props}>
-          {children}
-        </pre>
-      );
-    },
   };
 
   return (
-    (messages.length === 0 || !id) ? <div style={{
-      backgroundColor: '#1e1e20',
-      color: "white",
+    <div style={{
+      flex: 1,
+      background: "var(--bg-primary)",
+      color: "var(--text-primary)",
       display: "flex",
       flexDirection: "column",
-      alignItems: 'center',
-      flex: 1,
-      justifyContent: 'center',
       height: "100vh",
       position: "relative",
+      overflow: "hidden",
     }}>
-      {/* Persona Name Header */}
+      {/* Persona Header */}
       {personaName && (
         <div style={{
           position: "absolute",
           top: 0,
           left: 0,
           right: 0,
-          backgroundColor: "#1e1e20",
+          background: "rgba(15, 17, 23, 0.8)",
+          backdropFilter: "blur(10px)",
           padding: "16px 24px",
-          borderBottom: "1px solid rgba(255,255,255,0.1)",
+          borderBottom: "1px solid var(--border-subtle)",
           zIndex: 10,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          gap: "8px"
+          gap: "10px"
         }}>
-          <span style={{
-            fontSize: "14px",
-            color: "#9ca3af",
-            fontWeight: "500"
-          }}>
-            Chatting with:
-          </span>
+          <div style={{
+            width: "8px",
+            height: "8px",
+            borderRadius: "50%",
+            background: "var(--success)",
+            boxShadow: "0 0 8px var(--success)"
+          }} />
+          <span style={{ fontSize: "14px", color: "var(--text-secondary)" }}>Chatting with</span>
           <span style={{
             fontSize: "16px",
-            color: "#8b5cf6",
-            fontWeight: "600"
+            fontWeight: "600",
+            background: "var(--accent-gradient)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
           }}>
             {personaName}
           </span>
         </div>
       )}
-      <div style={{
-        width: '1000px',
-        maxWidth: '1000px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center'
-      }}>
-        <div style={{ fontSize: '28px', marginBottom: '25px' }}>Where should we begin?</div>
-        <div style={{
-          display: "flex",
-          padding: 16,
-          backgroundColor: "#40414f",
-          borderRadius: "30px",
-          width: '90%',
-          gap: "12px",
-          alignItems: "center"
-        }}>
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask something..."
-            style={{
-              flex: 1,
-              backgroundColor: "transparent",
-              border: "none",
-              color: "white",
-              fontSize: "16px",
-              outline: "none",
-            }}
-          />
 
-          {/* File Upload Button for Welcome Screen */}
-          <input
-            type="file"
-            id="file-upload-welcome"
-            onChange={handleFileUpload}
-            style={{ display: 'none' }}
-            accept="image/*,.pdf,.txt,.doc,.docx,.zip,.rar,.js,.css,.html,.py"
-          />
-          <label
-            htmlFor="file-upload-welcome"
-            style={{
-              backgroundColor: "#565869",
-              border: "none",
-              borderRadius: "50%",
-              width: "40px",
-              height: "40px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: isUploading ? "not-allowed" : "pointer",
-              opacity: isUploading ? 0.6 : 1,
-              transition: "all 0.2s ease",
-              color: "white",
-              fontSize: "18px"
-            }}
-            title="Upload file"
-          >
-            {isUploading ? "⏳" : "📎"}
-          </label>
-
-          <button
-            onClick={handleSend}
-            style={{
-              backgroundColor: "#40414f",
-              border: "none",
-              color: "white",
-              fontSize: "18px",
-              borderRadius: "50%",
-              width: "36px",
-              height: "36px",
-              cursor: "pointer",
-            }}
-          >
-            ➤
-          </button>
-        </div>
-
-        {/* File Preview Area for Welcome Screen */}
-        {uploadedFiles.length > 0 && (
-          <div style={{
-            marginTop: "20px",
-            width: "90%",
-            backgroundColor: "#2d2d30",
-            padding: "16px",
-            borderRadius: "12px",
-            border: "1px solid rgba(255,255,255,0.1)"
-          }}>
-            <div style={{
-              display: "flex",
-              gap: "12px",
-              flexWrap: "wrap"
-            }}>
-              {uploadedFiles.map((file, index) => (
-                <div key={file.file_id} style={{
-                  backgroundColor: "#40414f",
-                  padding: "8px 12px",
-                  borderRadius: "12px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  fontSize: "14px",
-                  color: "white",
-                  border: "1px solid rgba(255,255,255,0.1)"
-                }}>
-                  <span>📄</span>
-                  <span>{file.filename}</span>
-                  <button
-                    onClick={() => setUploadedFiles(prev => prev.filter((_, i) => i !== index))}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "#888",
-                      cursor: "pointer",
-                      fontSize: "16px",
-                      padding: "2px"
-                    }}
-                    title="Remove file"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div> :
+      {/* Main Chat Area */}
       <div style={{
         flex: 1,
-        backgroundColor: '#1e1e20',
-        color: "white",
+        overflowY: "auto",
         display: "flex",
         flexDirection: "column",
-        height: "100vh",
-        position: "relative",
-        overflowY: "auto",
-        scrollbarWidth: "none", // Firefox
-        msOverflowStyle: "none", // IE and Edge
+        alignItems: "center",
+        paddingTop: personaName ? "80px" : "40px",
+        paddingBottom: "140px", // Space for input area
       }}>
-        {/* Persona Name Header */}
-        {personaName && (
+        {messages.length === 0 ? (
+          // Welcome Screen
           <div style={{
-            position: "sticky",
-            top: 0,
-            backgroundColor: "#1e1e20",
-            padding: "16px 24px",
-            borderBottom: "1px solid rgba(255,255,255,0.1)",
-            zIndex: 10,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "8px"
-          }}>
-            <span style={{
-              fontSize: "14px",
-              color: "#9ca3af",
-              fontWeight: "500"
-            }}>
-              Chatting with:
-            </span>
-            <span style={{
-              fontSize: "16px",
-              color: "#8b5cf6",
-              fontWeight: "600"
-            }}>
-              {personaName}
-            </span>
-          </div>
-        )}
-        <div style={{
-          width: '100%',
-          minHeight: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          paddingBottom: "120px", // Ensure content doesn't go behind search bar
-        }}>
-          {/* Content Area - No internal scrolling */}
-          <div style={{
-            width: '1000px',
-            maxWidth: '1000px',
-            flex: 1,
-            padding: "20px",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            maxHeight: "calc(100vh - 20px)", // Ensure content area stops above search bar
-            overflowY: "auto"
+            justifyContent: "center",
+            height: "100%",
+            width: "100%",
+            maxWidth: "800px",
+            padding: "0 20px",
+            textAlign: "center",
+            animation: "fadeIn 0.5s ease-out",
+          }}>
+            <div style={{
+              width: "80px",
+              height: "80px",
+              background: "var(--accent-gradient)",
+              borderRadius: "24px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: "32px",
+              boxShadow: "var(--shadow-glow)",
+            }}>
+              {personaName ?
+                <PersonIcon style={{ fontSize: "48px", color: "white" }} /> :
+                <PsychologyIcon style={{ fontSize: "48px", color: "white" }} />
+              }
+            </div>
+            <h1 style={{
+              fontSize: "32px",
+              fontWeight: "700",
+              marginBottom: "16px",
+              background: "linear-gradient(to right, #fff, #a5b4fc)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}>
+              {personaName ? `Hi there! I'm ${personaName}` : "Hi there! How can I help?"}
+            </h1>
+            <p style={{ color: "var(--text-secondary)", fontSize: "16px", maxWidth: "600px", lineHeight: "1.6" }}>
+              {personaName ?
+                "I'm ready to chat. Ask me anything or share a file to get started." :
+                "I'm here to assist you with coding, analysis, writing, and more. Select a persona or start typing to begin."
+              }
+            </p>
+          </div>
+        ) : (
+          // Messages List
+          <div style={{
+            width: "100%",
+            maxWidth: "900px",
+            padding: "0 24px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "24px",
           }}>
             {messages.map((m, i) => {
-              let codeBlockIndex = 0; // Track code blocks within this message
+              let codeBlockIndex = 0;
               const isHovered = hoveredMessage === i;
-              const reactions = messageReactions[i] || [];
+              const isUser = m.role === "user";
 
               return (
                 <div
                   key={i}
                   style={{
-                    marginBottom: "16px",
-                    marginTop: "0px", // Fixed margin - no more movement
-                    padding: "12px 16px",
-                    borderRadius: "18px",
-                    backgroundColor: m.role === "user" ? "#343541" : "#171717",
-                    color: "white",
-                    width: "fit-content",
-                    maxWidth: "75%",
-                    alignSelf: m.role === "user" ? "flex-end" : "flex-start",
-                    marginLeft: m.role === "user" ? "auto" : undefined,
-                    marginRight: m.role === "assistant" ? "auto" : undefined,
-                    boxShadow: isHovered ? "0 4px 16px rgba(0,0,0,0.25)" : "0 2px 8px rgba(0,0,0,0.15)",
-                    transition: "all 0.2s ease",
-                    position: "relative",
-                    border: isHovered ? "1px solid rgba(255,255,255,0.1)" : "1px solid transparent",
+                    display: "flex",
+                    gap: "16px",
+                    flexDirection: isUser ? "row-reverse" : "row",
+                    alignItems: "flex-start",
+                    animation: "fadeIn 0.3s ease-out",
                   }}
                   onMouseEnter={() => setHoveredMessage(i)}
                   onMouseLeave={() => setHoveredMessage(null)}
                 >
-                  {/* Reactions Display (floating above message) */}
-                  {reactions.length > 0 && (
-                    <div style={{
-                      position: "absolute",
-                      top: "-35px",
-                      left: "50%",
-                      transform: "translateX(-50%)",
-                      display: "flex",
-                      gap: "4px",
-                      flexWrap: "wrap",
-                      backgroundColor: "rgba(0,0,0,0.8)",
-                      padding: "6px 10px",
-                      borderRadius: "12px",
-                      backdropFilter: "blur(10px)",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      zIndex: 10,
-                      pointerEvents: "auto",
-                      minWidth: "fit-content",
-                      width: "auto"
-                    }}>
-                      {reactions.map((reaction, idx) => (
-                        <span key={idx} style={{
-                          fontSize: "14px",
-                          padding: "2px 6px",
-                          backgroundColor: "rgba(255,255,255,0.1)",
-                          borderRadius: "12px",
-                          border: "1px solid rgba(255,255,255,0.2)"
-                        }}>
-                          {reaction}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Message Header */}
+                  {/* Avatar */}
                   <div style={{
+                    width: "36px",
+                    height: "36px",
+                    borderRadius: "12px",
+                    background: isUser ? "var(--bg-tertiary)" : "var(--accent-gradient)",
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "space-between",
-                    marginBottom: "8px",
-                    opacity: isHovered ? 1 : 0.7,
-                    transition: "opacity 0.2s ease"
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    boxShadow: isUser ? "none" : "var(--shadow-glow)",
                   }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <span style={{
-                        fontSize: "12px",
-                        fontWeight: "500",
-                        color: m.role === "user" ? "#10a37f" : "#8b5cf6"
-                      }}>
-                        {m.role === "user" ? "You" : "Assistant"}
+                    {isUser ?
+                      <PersonIcon style={{ fontSize: "20px", color: "var(--text-secondary)" }} /> :
+                      <PsychologyIcon style={{ fontSize: "20px", color: "white" }} />
+                    }
+                  </div>
+
+                  {/* Message Content */}
+                  <div style={{
+                    maxWidth: "85%",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: isUser ? "flex-end" : "flex-start",
+                  }}>
+                    <div style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      marginBottom: "4px",
+                      padding: "0 4px",
+                    }}>
+                      <span style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)" }}>
+                        {isUser ? "You" : "Assistant"}
                       </span>
-                      <span style={{
-                        fontSize: "11px",
-                        color: "#888"
-                      }}>
+                      <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
                         {formatTimestamp(m.timestamp)}
                       </span>
                     </div>
 
-                    {/* Copy Button Container - Always reserves space */}
                     <div style={{
-                      width: "26px", // Fixed width to prevent jumping
-                      height: "22px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center"
+                      position: "relative",
+                      padding: "12px 16px",
+                      borderRadius: "16px",
+                      borderTopRightRadius: isUser ? "4px" : "16px",
+                      borderTopLeftRadius: isUser ? "16px" : "4px",
+                      background: isUser ? "var(--bg-tertiary)" : "rgba(30, 30, 35, 0.6)",
+                      border: isUser ? "1px solid var(--border-subtle)" : "1px solid var(--border-highlight)",
+                      color: "var(--text-primary)",
+                      lineHeight: "1.6",
+                      fontSize: "15px",
+                      boxShadow: "var(--shadow-sm)",
                     }}>
-                      {/* Small Copy Button - Only visible on hover */}
-                      {isHovered && (
-                        <button
-                          onClick={() => copyMessageToClipboard(m.content, i)}
-                          title={copiedMessageId === i ? "Copied!" : "Copy message"}
-                          style={{
-                            background: "none",
-                            border: "none",
-                            color: copiedMessageId === i ? "#10a37f" : "#888",
-                            fontSize: "14px",
-                            cursor: "pointer",
-                            padding: "4px 6px",
-                            borderRadius: "4px",
-                            transition: "all 0.2s ease",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center"
-                          }}
-                          onMouseEnter={(e) => {
-                            if (copiedMessageId !== i) {
-                              e.target.style.backgroundColor = "rgba(255,255,255,0.1)";
-                              e.target.style.color = "#fff";
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (copiedMessageId !== i) {
-                              e.target.style.backgroundColor = "transparent";
-                              e.target.style.color = "#888";
+                      {m.role === "assistant" && m.isStreaming && !m.content ? (
+                        <div className="typing-indicator">
+                          <div className="typing-dot"></div>
+                          <div className="typing-dot"></div>
+                          <div className="typing-dot"></div>
+                        </div>
+                      ) : (
+                        <ReactMarkdown
+                          components={{
+                            ...components,
+                            code: (props) => {
+                              const result = components.code({
+                                ...props,
+                                messageIndex: i,
+                                codeBlockIndex: codeBlockIndex++
+                              });
+                              return result;
                             }
                           }}
                         >
-                          {copiedMessageId === i ? (
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="20,6 9,17 4,12"></polyline>
-                            </svg>
-                          ) : (
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                            </svg>
-                          )}
+                          {m.content}
+                        </ReactMarkdown>
+                      )}
+
+                      {/* Copy Button */}
+                      {isHovered && !m.isStreaming && (
+                        <button
+                          onClick={() => copyMessageToClipboard(m.content, i)}
+                          style={{
+                            position: "absolute",
+                            top: "8px",
+                            right: "8px",
+                            background: "var(--bg-tertiary)",
+                            border: "1px solid var(--border-subtle)",
+                            color: copiedMessageId === i ? "var(--success)" : "var(--text-secondary)",
+                            borderRadius: "6px",
+                            padding: "4px",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            transition: "all 0.2s",
+                          }}
+                          title="Copy message"
+                        >
+                          {copiedMessageId === i ? <CheckIcon style={{ fontSize: 14 }} /> : <ContentCopyIcon style={{ fontSize: 14 }} />}
                         </button>
                       )}
                     </div>
                   </div>
-                  {/* Message Content */}
-                  <div style={{ lineHeight: "1.6" }}>
-                    <ReactMarkdown
-                      components={{
-                        ...components,
-                        code: (props) => {
-                          const result = components.code({
-                            ...props,
-                            messageIndex: i,
-                            codeBlockIndex: codeBlockIndex++
-                          });
-                          return result;
-                        }
-                      }}
-                    >
-                      {m.content}
-                    </ReactMarkdown>
-                  </div>
                 </div>
               );
             })}
+            <div ref={messagesEndRef} />
           </div>
-        </div>
+        )}
+      </div>
 
-        {/* File Preview Area */}
+      {/* Input Area */}
+      <div style={{
+        position: "absolute",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        padding: "24px",
+        background: "linear-gradient(to top, var(--bg-primary) 0%, transparent 100%)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        zIndex: 20,
+      }}>
+        {/* File Preview */}
         {uploadedFiles.length > 0 && (
           <div style={{
-            position: "fixed",
-            bottom: "100px",
-            left: isSidebarCollapsed ? 90 : 300,
-            right: 0,
-            backgroundColor: "#2d2d30",
-            padding: "16px 20px",
-            zIndex: 999,
+            width: "100%",
+            maxWidth: "900px",
+            marginBottom: "12px",
             display: "flex",
-            justifyContent: "center",
-            borderTop: "1px solid rgba(255,255,255,0.1)"
+            gap: "8px",
+            flexWrap: "wrap",
           }}>
-            <div style={{
-              display: "flex",
-              gap: "12px",
-              flexWrap: "wrap",
-              maxWidth: "1000px",
-              width: "100%"
-            }}>
-              {uploadedFiles.map((file, index) => (
-                <div key={file.file_id} style={{
-                  backgroundColor: "#40414f",
-                  padding: "8px 12px",
-                  borderRadius: "12px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  fontSize: "14px",
-                  color: "white",
-                  border: "1px solid rgba(255,255,255,0.1)"
-                }}>
-                  <span>📄</span>
-                  <span>{file.filename}</span>
-                  <button
-                    onClick={() => setUploadedFiles(prev => prev.filter((_, i) => i !== index))}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "#888",
-                      cursor: "pointer",
-                      fontSize: "16px",
-                      padding: "2px"
-                    }}
-                    title="Remove file"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
+            {uploadedFiles.map((file, index) => (
+              <div key={file.file_id} style={{
+                background: "var(--bg-tertiary)",
+                padding: "6px 12px",
+                borderRadius: "8px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "13px",
+                border: "1px solid var(--border-subtle)",
+              }}>
+                <span>📄</span>
+                <span style={{ maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {file.filename}
+                </span>
+                <button
+                  onClick={() => setUploadedFiles(prev => prev.filter((_, i) => i !== index))}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--text-secondary)",
+                    cursor: "pointer",
+                    padding: "2px",
+                    display: "flex",
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Fixed Input Bar at Bottom */}
         <div style={{
-          position: "fixed",
-          bottom: 0,
-          left: isSidebarCollapsed ? 90 : 300, // Account for sidebar width
-          right: 0,
-          backgroundColor: "#1e1e20",
-          padding: "20px",
-          zIndex: 1000,
+          width: "100%",
+          maxWidth: "900px",
+          position: "relative",
+          background: "rgba(30, 30, 35, 0.8)",
+          backdropFilter: "blur(12px)",
+          border: "1px solid var(--border-highlight)",
+          borderRadius: "16px",
+          padding: "8px 12px",
           display: "flex",
-          justifyContent: "center",
-        }}>
-          <div style={{
-            display: "flex",
-            padding: "12px 16px 12px 24px",
-            backgroundColor: "#40414f",
-            borderRadius: "24px",
-            width: "1000px",
-            maxWidth: "1000px",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
-            gap: "12px",
-            alignItems: "center",
-            border: "1px solid rgba(255,255,255,0.1)",
-            transition: "all 0.2s ease"
-          }}>
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask something..."
-              disabled={loading}
-              style={{
-                flex: 1,
-                backgroundColor: "transparent",
-                border: "none",
-                color: "white",
-                fontSize: "16px",
-                outline: "none",
-                minHeight: "24px",
-                opacity: loading ? 0.6 : 1,
-                transition: "opacity 0.2s ease"
-              }}
-            />
+          alignItems: "center",
+          gap: "12px",
+          boxShadow: "var(--shadow-lg)",
+          transition: "border-color 0.2s",
+        }}
+          onFocus={(e) => e.currentTarget.style.borderColor = "var(--accent-primary)"}
+          onBlur={(e) => e.currentTarget.style.borderColor = "var(--border-highlight)"}
+        >
+          <input
+            type="file"
+            id="file-upload"
+            onChange={handleFileUpload}
+            style={{ display: 'none' }}
+            accept="image/*,.pdf,.txt,.doc,.docx,.zip,.rar,.js,.css,.html,.py"
+          />
+          <label
+            htmlFor="file-upload"
+            style={{
+              cursor: isUploading ? "not-allowed" : "pointer",
+              padding: "8px",
+              borderRadius: "8px",
+              color: "var(--text-secondary)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.2s",
+            }}
+            className="hover-bg"
+            title="Upload file"
+          >
+            {isUploading ? <div className="spinner" /> : <AttachFileIcon />}
+          </label>
 
-            {/* File Upload Button */}
-            <input
-              type="file"
-              id="file-upload"
-              onChange={handleFileUpload}
-              style={{ display: 'none' }}
-              accept="image/*,.pdf,.txt,.doc,.docx,.zip,.rar,.js,.css,.html,.py"
-            />
-            <label
-              htmlFor="file-upload"
-              style={{
-                backgroundColor: "#565869",
-                border: "none",
-                borderRadius: "50%",
-                width: "40px",
-                height: "40px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: isUploading ? "not-allowed" : "pointer",
-                opacity: isUploading ? 0.6 : 1,
-                transition: "all 0.2s ease",
-                color: "white",
-                fontSize: "18px"
-              }}
-              title="Upload file"
-            >
-              {isUploading ? "⏳" : "📎"}
-            </label>
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask anything..."
+            style={{
+              flex: 1,
+              background: "transparent",
+              border: "none",
+              color: "var(--text-primary)",
+              fontSize: "16px",
+              outline: "none",
+              padding: "8px 0",
+            }}
+          />
 
-            <button
-              onClick={handleSend}
-              disabled={loading || !input.trim()}
-              style={{
-                backgroundColor: loading || !input.trim() ? "#565869" : "#10a37f",
-                border: "none",
-                color: "white",
-                fontSize: "18px",
-                borderRadius: "50%",
-                width: "44px",
-                height: "44px",
-                cursor: loading || !input.trim() ? "not-allowed" : "pointer",
-                transition: "all 0.2s ease",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                boxShadow: loading || !input.trim() ? "none" : "0 2px 8px rgba(16, 163, 127, 0.3)"
-              }}
-              onMouseEnter={(e) => {
-                if (!loading && input.trim()) {
-                  e.target.style.backgroundColor = "#0d8a6b";
-                  e.target.style.transform = "scale(1.05)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!loading && input.trim()) {
-                  e.target.style.backgroundColor = "#10a37f";
-                  e.target.style.transform = "scale(1)";
-                }
-              }}
-            >
-              {loading ? "⏳" : "➤"}
-            </button>
-          </div>
+          <button
+            onClick={handleSend}
+            disabled={!input.trim() && uploadedFiles.length === 0}
+            style={{
+              background: (input.trim() || uploadedFiles.length > 0) ? "var(--accent-gradient)" : "var(--bg-tertiary)",
+              border: "none",
+              color: "white",
+              borderRadius: "10px",
+              width: "36px",
+              height: "36px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: (input.trim() || uploadedFiles.length > 0) ? "pointer" : "default",
+              opacity: (input.trim() || uploadedFiles.length > 0) ? 1 : 0.5,
+              transition: "all 0.2s",
+              boxShadow: (input.trim() || uploadedFiles.length > 0) ? "var(--shadow-glow)" : "none",
+            }}
+          >
+            <SendIcon style={{ fontSize: "18px" }} />
+          </button>
+        </div>
+        <div style={{ marginTop: "8px", fontSize: "11px", color: "var(--text-tertiary)" }}>
+          ManishGPT can make mistakes. Consider checking important information.
         </div>
       </div>
+
+      <style>{`
+        .hover-bg:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+        .spinner {
+          width: 16px;
+          height: 16px;
+          border: 2px solid var(--text-secondary);
+          border-top-color: transparent;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
+    </div>
   );
 }
 
