@@ -455,7 +455,11 @@ def delete_conversation(conversation_id: int, db: Session = Depends(get_db)):
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     
-    # Delete all messages in the conversation first
+    # Delete logs first (they reference messages via foreign key)
+    from models import AgentRunLog
+    db.query(AgentRunLog).filter_by(conversation_id=conversation_id).delete()
+    
+    # Delete all messages in the conversation
     db.query(Message).filter_by(conversation_id=conversation_id).delete()
     
     # Delete the conversation
