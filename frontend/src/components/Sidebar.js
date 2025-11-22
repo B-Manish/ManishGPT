@@ -29,10 +29,17 @@ function Sidebar({ isCollapsed, onToggle }) {
       fetchConversations();
     };
     
+    // Listen for conversation creation events
+    const handleConversationCreated = () => {
+      fetchConversations();
+    };
+    
     window.addEventListener('conversationDeleted', handleConversationDeleted);
+    window.addEventListener('conversationCreated', handleConversationCreated);
     
     return () => {
       window.removeEventListener('conversationDeleted', handleConversationDeleted);
+      window.removeEventListener('conversationCreated', handleConversationCreated);
     };
   }, []);
 
@@ -67,14 +74,10 @@ function Sidebar({ isCollapsed, onToggle }) {
     }
   };
 
-  const startNewChat = async (personaId) => {
-    try {
-      const newConversation = await userAPI.createConversation(personaId);
-      navigate(`/chat/${newConversation.id}`);
-      fetchConversations();
-    } catch (error) {
-      console.error('Error creating new conversation:', error);
-    }
+  const startNewChat = (personaId) => {
+    // Navigate to persona route without creating conversation
+    // Conversation will be created when first message is sent
+    navigate(`/chat/persona/${personaId}`);
   };
 
   const startEditing = (conversation) => {

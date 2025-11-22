@@ -16,22 +16,83 @@ function Chat({ isSidebarCollapsed }) {
   const [copiedMessageId, setCopiedMessageId] = useState(null);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [personaId, setPersonaId] = useState(null);
+  const [conversationId, setConversationId] = useState(null);
+  const [personaName, setPersonaName] = useState(null);
 
+  // Check if id is a persona route or conversation route
   useEffect(() => {
     if (id) {
-      userAPI.getMessages(id)
-        .then(setMessages)
-        .catch(error => console.error('Error fetching messages:', error));
+      if (id.startsWith('persona/')) {
+        // Extract persona ID from route like "persona/123"
+        const extractedPersonaId = id.replace('persona/', '');
+        setPersonaId(extractedPersonaId);
+        setConversationId(null);
+        setMessages([]); // Clear messages for new persona chat
+        // Fetch persona name
+        fetchPersonaName(extractedPersonaId);
+      } else {
+        // Regular conversation ID
+        setPersonaId(null);
+        setConversationId(id);
+        userAPI.getMessages(id)
+          .then(setMessages)
+          .catch(error => console.error('Error fetching messages:', error));
+        // Fetch conversation to get persona info
+        userAPI.getConversation(id)
+          .then(conv => {
+            if (conv.persona_id) {
+              fetchPersonaName(conv.persona_id);
+            }
+          })
+          .catch(error => console.error('Error fetching conversation:', error));
+      }
+    } else {
+      setPersonaId(null);
+      setConversationId(null);
+      setPersonaName(null);
+      setMessages([]);
     }
   }, [id]);
+
+  const fetchPersonaName = async (personaId) => {
+    try {
+      const personas = await userAPI.getPersonas();
+      const persona = (personas.personas || personas).find(p => p.id === parseInt(personaId));
+      if (persona) {
+        setPersonaName(persona.name);
+      }
+    } catch (error) {
+      console.error('Error fetching persona name:', error);
+    }
+  };
 
   const handleSend = async () => {
     if (!input.trim()) return;
     
-    // If no conversation ID, show message to select a persona first
-    if (!id) {
+    // If no conversation ID and no persona ID, show message to select a persona first
+    if (!conversationId && !personaId) {
       alert("Please select a persona from the sidebar to start chatting.");
       return;
+    }
+
+    let currentConversationId = conversationId;
+
+    // If we have a persona ID but no conversation ID, create the conversation first
+    if (personaId && !conversationId) {
+      try {
+        const newConversation = await userAPI.createConversation(personaId);
+        currentConversationId = newConversation.id;
+        setConversationId(currentConversationId);
+        // Update the URL to the conversation ID
+        window.history.replaceState({}, '', `/chat/${currentConversationId}`);
+        // Trigger sidebar refresh to show new conversation
+        window.dispatchEvent(new Event('conversationCreated'));
+      } catch (error) {
+        console.error('Error creating conversation:', error);
+        alert("Failed to create conversation. Please try again.");
+        return;
+      }
     }
 
     const userMsg = { role: "user", content: input };
@@ -46,7 +107,7 @@ function Chat({ isSidebarCollapsed }) {
 
     try {
       await userAPI.sendMessageStream(
-        id,
+        currentConversationId,
         {
           content: input,
           file_ids: uploadedFiles.map(file => file.file_id)
@@ -314,6 +375,38 @@ function Chat({ isSidebarCollapsed }) {
       height: "100vh",
       position: "relative",
     }}>
+      {/* Persona Name Header */}
+      {personaName && (
+        <div style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: "#1e1e20",
+          padding: "16px 24px",
+          borderBottom: "1px solid rgba(255,255,255,0.1)",
+          zIndex: 10,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "8px"
+        }}>
+          <span style={{
+            fontSize: "14px",
+            color: "#9ca3af",
+            fontWeight: "500"
+          }}>
+            Chatting with:
+          </span>
+          <span style={{
+            fontSize: "16px",
+            color: "#8b5cf6",
+            fontWeight: "600"
+          }}>
+            {personaName}
+          </span>
+        </div>
+      )}
       <div style={{ 
         width: '1000px', 
         maxWidth: '1000px',
@@ -456,6 +549,36 @@ function Chat({ isSidebarCollapsed }) {
         scrollbarWidth: "none", // Firefox
         msOverflowStyle: "none", // IE and Edge
       }}>
+        {/* Persona Name Header */}
+        {personaName && (
+          <div style={{
+            position: "sticky",
+            top: 0,
+            backgroundColor: "#1e1e20",
+            padding: "16px 24px",
+            borderBottom: "1px solid rgba(255,255,255,0.1)",
+            zIndex: 10,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px"
+          }}>
+            <span style={{
+              fontSize: "14px",
+              color: "#9ca3af",
+              fontWeight: "500"
+            }}>
+              Chatting with:
+            </span>
+            <span style={{
+              fontSize: "16px",
+              color: "#8b5cf6",
+              fontWeight: "600"
+            }}>
+              {personaName}
+            </span>
+          </div>
+        )}
         <div style={{ 
           width: '100%', 
           minHeight: '100%',
