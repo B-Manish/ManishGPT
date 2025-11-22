@@ -217,52 +217,81 @@ print(f"🔧 Loaded {len(available_tools)} tools: {[tool.name for tool in availa
 
 # Auto-create tools in database on startup
 def ensure_tools_exist():
-    """Ensure basic tools exist in database"""
+    """Sync database tools with tools folder - tools folder is source of truth"""
     db = SessionLocal()
     try:
-        # Check if tools already exist
-        existing_tools = db.query(Tool).count()
-        if existing_tools > 0:
-            print(f"✅ Database tools already exist ({existing_tools} found)")
-            return
+        # Get tools from registry (source of truth)
+        from tools.registry import TOOL_REGISTRY
         
-        # Create basic tools
-        tools_to_create = [
-            {
-                "name": "youtube",
+        # Map tool names to their classes for descriptions
+        tool_descriptions = {
+            "youtube": {
                 "description": "YouTube video transcript extraction tool",
-                "tool_class": "YouTube_Tool",
-                "config": {"enabled": True}
+                "tool_class": "YouTube_Tool"
             },
-            {
-                "name": "web_search", 
+            "web_search": {
                 "description": "Web search tool for finding information",
-                "tool_class": "WebSearchTool",
-                "config": {"enabled": True}
+                "tool_class": "WebSearchTool"
             },
-            {
-                "name": "file_processing",
+            "file_processing": {
                 "description": "File processing tool for PDF, DOCX, and other document types",
-                "tool_class": "FileProcessingTool",
-                "config": {"enabled": True}
+                "tool_class": "FileProcessingTool"
             },
-            {
-                "name": "gmail",
+            "gmail": {
                 "description": "Gmail integration tool for email management",
-                "tool_class": "GmailTool",
-                "config": {"enabled": True}
+                "tool_class": "GmailTool"
             }
-        ]
+        }
         
-        for tool_data in tools_to_create:
-            tool = Tool(**tool_data, is_active=True)
-            db.add(tool)
+        # Get all tools currently in registry (source of truth)
+        registry_tool_names = set(TOOL_REGISTRY.keys())
         
-        db.commit()
-        print(f"✅ Created {len(tools_to_create)} tools in database")
+        # Get all tools in database
+        db_tools = db.query(Tool).all()
+        db_tool_names = {tool.name for tool in db_tools}
+        
+        created_count = 0
+        removed_count = 0
+        
+        # Create missing tools
+        for tool_name in registry_tool_names:
+            if tool_name not in db_tool_names:
+                tool_info = tool_descriptions.get(tool_name, {
+                    "description": f"{tool_name} tool",
+                    "tool_class": TOOL_REGISTRY[tool_name]().__class__.__name__
+                })
+                tool = Tool(
+                    name=tool_name,
+                    description=tool_info["description"],
+                    tool_class=tool_info["tool_class"],
+                    config={"enabled": True},
+                    is_active=True
+                )
+                db.add(tool)
+                created_count += 1
+                print(f"✅ Created tool: {tool_name}")
+        
+        # Delete tools not in registry (tools folder is source of truth)
+        for db_tool in db_tools:
+            if db_tool.name not in registry_tool_names:
+                # Delete tools that are no longer in code
+                db.delete(db_tool)
+                removed_count += 1
+                print(f"🗑️  Deleted tool (not in code): {db_tool.name}")
+        
+        if created_count > 0 or removed_count > 0:
+            db.commit()
+            if created_count > 0:
+                print(f"✅ Created {created_count} new tool(s)")
+            if removed_count > 0:
+                print(f"🗑️  Deleted {removed_count} tool(s) not in code")
+        else:
+            print(f"✅ Database is in sync with tools folder ({len(registry_tool_names)} tools)")
         
     except Exception as e:
-        print(f"❌ Error creating tools: {e}")
+        print(f"❌ Error syncing tools: {e}")
+        import traceback
+        traceback.print_exc()
         db.rollback()
     finally:
         db.close()
