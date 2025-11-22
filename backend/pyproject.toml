@@ -11,6 +11,7 @@ dependencies = [
     "pydantic[email]",
     "python-dotenv",
     "psycopg2-binary",
+    "psycopg[binary]",
     "alembic",
     "agno",
     "openai",

@@ -10,6 +10,7 @@ from agno.agent import Agent as AgnoAgent
 from agno.team.team import Team
 from agno.models.openai import OpenAIChat
 from agno.models.groq import Groq
+from agno.db.postgres import PostgresDb
 from dotenv import load_dotenv
 import os
 import json
@@ -26,9 +27,32 @@ class AgnoTeamService:
     def __init__(self):
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         self.groq_api_key = os.getenv("GROQ_API_KEY")
+        
+        # Initialize Agno PostgresDb for agentic memory
+        # Convert SQLAlchemy URL format to Agno format (postgresql+psycopg://)
+        database_url = os.getenv(
+            "DATABASE_URL", 
+            "postgresql://postgres:manish@localhost:5432/manishgpt"
+        )
+        # Convert postgresql:// to postgresql+psycopg:// for Agno
+        if database_url.startswith("postgresql://"):
+            agno_db_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+        elif database_url.startswith("postgresql+psycopg://"):
+            agno_db_url = database_url
+        else:
+            # Try to construct it
+            agno_db_url = database_url.replace("://", "+psycopg://", 1) if "://" in database_url else database_url
+        
+        try:
+            self.agno_db = PostgresDb(db_url=agno_db_url)
+            print(f"✅ Agno PostgresDb initialized for agentic memory")
+        except Exception as e:
+            print(f"⚠️  Warning: Could not initialize Agno PostgresDb: {e}")
+            print("   Agentic memory will be disabled")
+            self.agno_db = None
     
-    def create_agent_from_model(self, agent_model: AgentModel) -> AgnoAgent:
-        """Create an Agno Agent from database Agent model"""
+    def create_agent_from_model(self, agent_model: AgentModel, enable_memory: bool = True) -> AgnoAgent:
+        """Create an Agno Agent from database Agent model with agentic memory support"""
         # Get model
         if agent_model.model_provider.lower() == "openai":
             model = OpenAIChat(id=agent_model.model_id, api_key=self.openai_api_key)
@@ -41,15 +65,22 @@ class AgnoTeamService:
         tool_names = agent_model.tools or []
         tools = get_tools(tool_names)
         
-        # Create Agno Agent with role
-        return AgnoAgent(
-            name=agent_model.name,
-            role=f"{agent_model.role}: {agent_model.instructions}",  # Role with instructions
-            model=model,
-            tools=tools,
-            debug_mode=True,
-            debug_level=2,
-        )
+        # Create Agno Agent with role and agentic memory
+        agent_kwargs = {
+            "name": agent_model.name,
+            "role": f"{agent_model.role}: {agent_model.instructions}",  # Role with instructions
+            "model": model,
+            "tools": tools,
+            "debug_mode": True,
+            "debug_level": 2,
+        }
+        
+        # Enable agentic memory if database is available
+        if enable_memory and self.agno_db is not None:
+            agent_kwargs["db"] = self.agno_db
+            agent_kwargs["enable_agentic_memory"] = True
+        
+        return AgnoAgent(**agent_kwargs)
     
     def create_team_from_persona(self, db: Session, persona_id: int) -> Optional[Team]:
         """Create an Agno Team from a persona's agents"""
@@ -84,18 +115,25 @@ class AgnoTeamService:
                 team_model = OpenAIChat(id="gpt-4o", api_key=self.openai_api_key)
             
             # Create a team with single member
-            return Team(
-                name=f"{persona.name} Team",
-                model=team_model,
-                members=[single_agent],
-                instructions=[
+            team_kwargs = {
+                "name": f"{persona.name} Team",
+                "model": team_model,
+                "members": [single_agent],
+                "instructions": [
                     persona.instructions or f"You are {persona.name}. Help users with their requests."
                 ],
-                debug_mode=True,
-                debug_level=2,
-                show_members_responses=True,
-                markdown=True,
-            )
+                "debug_mode": True,
+                "debug_level": 2,
+                "show_members_responses": True,
+                "markdown": True,
+            }
+            
+            # Enable team memory if database is available
+            if self.agno_db is not None:
+                team_kwargs["db"] = self.agno_db
+                team_kwargs["enable_user_memories"] = True
+            
+            return Team(**team_kwargs)
         
         # Multiple agents - create true collaborative team
         team_members = []
@@ -132,17 +170,24 @@ class AgnoTeamService:
         ])
         
         # Create Team
-        team = Team(
-            name=f"{persona.name} Team",
-            model=team_model,
-            members=team_members,
-            instructions=team_instructions,
-            debug_mode=True,
-            debug_level=2,
-            show_members_responses=True,
-            markdown=True,
-            add_member_tools_to_context=False,  # Keep tool context clean
-        )
+        team_kwargs = {
+            "name": f"{persona.name} Team",
+            "model": team_model,
+            "members": team_members,
+            "instructions": team_instructions,
+            "debug_mode": True,
+            "debug_level": 2,
+            "show_members_responses": True,
+            "markdown": True,
+            "add_member_tools_to_context": False,  # Keep tool context clean
+        }
+        
+        # Enable team memory if database is available
+        if self.agno_db is not None:
+            team_kwargs["db"] = self.agno_db
+            team_kwargs["enable_user_memories"] = True
+        
+        team = Team(**team_kwargs)
         
         return team
     
@@ -248,9 +293,10 @@ class AgnoTeamService:
         persona_id: int, 
         message: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        file_ids: Optional[List[int]] = None
+        file_ids: Optional[List[int]] = None,
+        user_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Process a message using the persona's Agno Team"""
+        """Process a message using the persona's Agno Team with agentic memory support"""
         # Get the persona
         persona = db.query(Persona).filter(Persona.id == persona_id).first()
         if not persona:
@@ -306,8 +352,44 @@ class AgnoTeamService:
             old_stdout = sys.stdout
             sys.stdout = _Tee(old_stdout, buf)
             try:
-                # Use Team.run() for collaborative execution
-                response = team.run(enhanced_message)
+                # Use Team.print_response() for team memory support
+                # Check if team has memory enabled (enable_user_memories=True)
+                if user_id and hasattr(team, 'db') and team.db and hasattr(team, 'print_response'):
+                    # Use team.print_response() with user_id for team memory
+                    # This will store and retrieve memories at the team level
+                    # print_response handles both memory storage/retrieval and response generation
+                    response_obj = team.print_response(
+                        enhanced_message,
+                        stream=False,
+                        user_id=user_id
+                    )
+                    # print_response may return None or the response object
+                    # If it returns None, we need to get the response from run()
+                    # But memory was already stored/retrieved by print_response
+                    if response_obj is None:
+                        # Get the response content using run() - memory context is already loaded
+                        response = team.run(enhanced_message)
+                    else:
+                        # Use the response from print_response
+                        response = response_obj
+                elif user_id and hasattr(team, 'members') and len(team.members) == 1:
+                    # Single agent team - try agent's print_response
+                    single_agent = team.members[0]
+                    if hasattr(single_agent, 'db') and single_agent.db and hasattr(single_agent, 'print_response'):
+                        response_obj = single_agent.print_response(
+                            enhanced_message,
+                            stream=False,
+                            user_id=user_id
+                        )
+                        if response_obj is None:
+                            response = single_agent.run(enhanced_message)
+                        else:
+                            response = response_obj
+                    else:
+                        response = team.run(enhanced_message)
+                else:
+                    # No user_id or memory not enabled - use team.run()
+                    response = team.run(enhanced_message)
             finally:
                 sys.stdout = old_stdout
             raw_log = buf.getvalue()
@@ -361,6 +443,63 @@ class AgnoTeamService:
                 team_info["assistants"].append(agent_info)
         
         return team_info
+    
+    def get_user_memories(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get memories for a specific user"""
+        if not self.agno_db:
+            return []
+        
+        try:
+            # Create a temporary agent to access memory methods
+            # We need an agent instance to call get_user_memories
+            temp_model = OpenAIChat(id="gpt-4o-mini", api_key=self.openai_api_key)
+            temp_agent = AgnoAgent(
+                name="memory_reader",
+                model=temp_model,
+                db=self.agno_db,
+                enable_agentic_memory=True
+            )
+            memories = temp_agent.get_user_memories(user_id=user_id)
+            return memories if memories else []
+        except Exception as e:
+            print(f"Error getting user memories: {e}")
+            return []
+    
+    def create_agent_with_memory(
+        self,
+        name: str,
+        model_provider: str = "openai",
+        model_id: str = "gpt-4o",
+        instructions: Optional[List[str]] = None,
+        tool_names: Optional[List[str]] = None
+    ) -> AgnoAgent:
+        """Create a standalone agent with agentic memory enabled"""
+        # Get model
+        if model_provider.lower() == "openai":
+            model = OpenAIChat(id=model_id, api_key=self.openai_api_key)
+        elif model_provider.lower() == "groq":
+            model = Groq(id=model_id, api_key=self.groq_api_key)
+        else:
+            raise ValueError(f"Unknown model_provider: {model_provider}")
+        
+        # Get tools
+        tools = get_tools(tool_names or [])
+        
+        # Create agent with memory
+        agent_kwargs = {
+            "name": name,
+            "model": model,
+            "tools": tools,
+            "instructions": instructions or [],
+            "debug_mode": True,
+        }
+        
+        # Enable agentic memory if database is available
+        if self.agno_db is not None:
+            agent_kwargs["db"] = self.agno_db
+            agent_kwargs["enable_agentic_memory"] = True
+        
+        return AgnoAgent(**agent_kwargs)
 
 
 # Global instance

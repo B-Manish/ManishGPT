@@ -1212,12 +1212,15 @@ def send_message(
                 })
             
             # Process message with persona's team leader
+            # Use user email as user_id for agentic memory
+            user_id = current_user.email if current_user else None
             ai_result = agno_team_service.process_message_with_persona(
                 db=db,
                 persona_id=conversation.persona_id,
                 message=content,
                 conversation_history=conversation_history[:-1],  # Exclude the current message
-                file_ids=file_ids
+                file_ids=file_ids,
+                user_id=user_id
             )
             ai_response = ai_result["content"] if isinstance(ai_result, dict) else ai_result
             # Create AI response message
@@ -1332,12 +1335,15 @@ async def send_message_stream(
                 })
             
             # Process message with persona's team leader
+            # Use user email as user_id for agentic memory
+            user_id = current_user.email if current_user else None
             ai_result = agno_team_service.process_message_with_persona(
                 db=db,
                 persona_id=conversation.persona_id,
                 message=content,
                 conversation_history=conversation_history[:-1],
-                file_ids=file_ids
+                file_ids=file_ids,
+                user_id=user_id
             )
             ai_response = ai_result["content"] if isinstance(ai_result, dict) else ai_result
 
@@ -1426,6 +1432,59 @@ async def send_message_stream(
             "Content-Type": "text/event-stream",
         }
     )
+
+# =============================================================================
+# AGENTIC MEMORY ENDPOINTS
+# =============================================================================
+
+@app.get("/user/memories")
+def get_user_memories(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get agentic memories for the current user"""
+    try:
+        user_id = current_user.email
+        memories = agno_team_service.get_user_memories(user_id=user_id)
+        return {
+            "user_id": user_id,
+            "memories": memories,
+            "count": len(memories)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving memories: {str(e)}")
+
+@app.post("/user/memories/clear")
+def clear_user_memories(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Clear all agentic memories for the current user"""
+    try:
+        user_id = current_user.email
+        # Create a temporary agent to clear memories
+        from agno.models.openai import OpenAIChat
+        import os
+        temp_model = OpenAIChat(id="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"))
+        temp_agent = agno_team_service.create_agent_with_memory(
+            name="memory_manager",
+            model_provider="openai",
+            model_id="gpt-4o-mini"
+        )
+        
+        # Use the agent to clear memories by asking it to remove them
+        temp_agent.print_response(
+            "Remove all existing memories of me.",
+            stream=False,
+            user_id=user_id
+        )
+        
+        return {
+            "user_id": user_id,
+            "message": "Memories cleared successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error clearing memories: {str(e)}")
 
 # =============================================================================
 # PERSONA MANAGEMENT ENDPOINTS
