@@ -1,0 +1,51 @@
+[project]
+name = "manishgpt-backend"
+version = "0.1.0"
+description = "Backend for ManishGPT chat application"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "sqlalchemy",
+    "pydantic",
+    "pydantic[email]",
+    "python-dotenv",
+    "psycopg2-binary",
+    "psycopg[binary]",
+    "alembic",
+    "agno",
+    "openai",
+    "litellm",
+    "youtube-transcript-api",
+    "yt-dlp",
+    "numpy",
+    "pillow",
+    "groq",
+    "pyjwt",
+    "bcrypt",
+    "python-multipart",
+    "minio",
+    "pypdf2",
+    "python-docx",
+    "python-magic",
+    "discord-py>=2.6.4",
+    "pygithub>=2.8.1",
+    "newspaper4k>=0.9.3.1",
+    "lxml-html-clean>=0.4.3",
+    # Gmail API dependencies
+    "google-auth>=2.0.0",
+    "google-auth-oauthlib>=1.0.0",
+    "google-auth-httplib2>=0.1.0",
+    "google-api-python-client>=2.0.0",
+    "authlib>=1.2.0",
+    "httpx>=0.24.0",
+    "requests>=2.25.0",
+    "pytz>=2023.3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]

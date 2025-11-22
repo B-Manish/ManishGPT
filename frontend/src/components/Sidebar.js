@@ -7,15 +7,21 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import SearchIcon from '@mui/icons-material/Search';
 import PsychologyIcon from '@mui/icons-material/Psychology';
+import LogoutIcon from '@mui/icons-material/Logout';
+import { useAuth } from '../contexts/AuthContext';
+import { userAPI } from '../services/api';
 
 function Sidebar({ isCollapsed, onToggle }) {
+  const [personas, setPersonas] = useState([]);
   const [conversations, setConversations] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState("");
   const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0, conversationId: null });
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   useEffect(() => {
+    fetchPersonas();
     fetchConversations();
     
     // Listen for conversation deletion events
@@ -23,10 +29,17 @@ function Sidebar({ isCollapsed, onToggle }) {
       fetchConversations();
     };
     
+    // Listen for conversation creation events
+    const handleConversationCreated = () => {
+      fetchConversations();
+    };
+    
     window.addEventListener('conversationDeleted', handleConversationDeleted);
+    window.addEventListener('conversationCreated', handleConversationCreated);
     
     return () => {
       window.removeEventListener('conversationDeleted', handleConversationDeleted);
+      window.removeEventListener('conversationCreated', handleConversationCreated);
     };
   }, []);
 
@@ -43,34 +56,28 @@ function Sidebar({ isCollapsed, onToggle }) {
     };
   }, [contextMenu.show]);
 
+  const fetchPersonas = async () => {
+    try {
+      const data = await userAPI.getPersonas();
+      setPersonas(data.personas || data);
+    } catch (error) {
+      console.error('Error fetching personas:', error);
+    }
+  };
+
   const fetchConversations = async () => {
     try {
-      const response = await fetch('http://localhost:8000/conversations');
-      const data = await response.json();
-      setConversations(data);
+      const data = await userAPI.getConversations();
+      setConversations(data.conversations || data);
     } catch (error) {
       console.error('Error fetching conversations:', error);
     }
   };
 
-  const startNewChat = async () => {
-    try {
-      const response = await fetch('http://localhost:8000/conversations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ title: null }),
-      });
-      
-      if (response.ok) {
-        const newConversation = await response.json();
-        navigate(`/chat/${newConversation.id}`);
-        fetchConversations();
-      }
-    } catch (error) {
-      console.error('Error creating new conversation:', error);
-    }
+  const startNewChat = (personaId) => {
+    // Navigate to persona route without creating conversation
+    // Conversation will be created when first message is sent
+    navigate(`/chat/persona/${personaId}`);
   };
 
   const startEditing = (conversation) => {
@@ -220,7 +227,7 @@ function Sidebar({ isCollapsed, onToggle }) {
           <ChevronRightIcon style={{ fontSize: "20px" }} />
         </button>
         
-        <button onClick={startNewChat} style={{
+        <button onClick={() => personas.length > 0 && startNewChat(personas[0].id)} style={{
           backgroundColor: "transparent",
           border: "none",
           color: "white",
@@ -237,7 +244,7 @@ function Sidebar({ isCollapsed, onToggle }) {
           <EditNoteIcon style={{ fontSize: "18px" }} />
         </button>
         
-        <button style={{
+        <button onClick={logout} style={{
           backgroundColor: "transparent",
           border: "none",
           color: "white",
@@ -250,8 +257,8 @@ function Sidebar({ isCollapsed, onToggle }) {
           alignItems: "center",
           justifyContent: "center",
           width: "20px",
-        }} title="Search chats">
-          <SearchIcon style={{ fontSize: "18px" }} />
+        }} title="Logout">
+          <LogoutIcon style={{ fontSize: "18px" }} />
         </button>
       </div>
     );
@@ -332,74 +339,95 @@ function Sidebar({ isCollapsed, onToggle }) {
         </button>
       </div>
 
-      {/* Main Navigation */}
+      {/* User Info */}
       <div style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "8px",
-        marginBottom: "30px",
-        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-        minHeight: "80px",
+        backgroundColor: "#40414f",
+        borderRadius: "8px",
+        padding: "12px",
+        marginBottom: "20px",
+        border: "1px solid #565869"
       }}>
-        <button onClick={startNewChat} style={{
-          backgroundColor: "transparent",
-          border: "none",
-          color: "white",
-          cursor: "pointer",
-          padding: "8px 10px",
-          borderRadius: "8px",
-          display: "flex",
-          alignItems: "center",
-          gap: "12px",
+        <div style={{
           fontSize: "14px",
-          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-          textAlign: "left",
-          width: "100%",
-          overflow: "hidden",
-          minHeight: "36px",
-        }} onMouseEnter={(e) => e.target.style.backgroundColor = "#40414f"}
-           onMouseLeave={(e) => e.target.style.backgroundColor = "transparent"}>
-          <EditNoteIcon style={{ fontSize: "18px", flexShrink: 0 }} />
-          <span style={{
-            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-            opacity: 1,
-            transform: "translateX(0)",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            flexShrink: 0,
-          }}>New chat</span>
-        </button>
-        
-        <button style={{
-          backgroundColor: "transparent",
-          border: "none",
+          fontWeight: "500",
           color: "white",
-          cursor: "pointer",
-          padding: "8px 10px",
-          borderRadius: "8px",
-          display: "flex",
-          alignItems: "center",
-          gap: "12px",
-          fontSize: "14px",
-          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-          textAlign: "left",
-          width: "100%",
-          overflow: "hidden",
-          minHeight: "36px",
-        }} onMouseEnter={(e) => e.target.style.backgroundColor = "#40414f"}
-           onMouseLeave={(e) => e.target.style.backgroundColor = "transparent"}>
-          <SearchIcon style={{ fontSize: "18px", flexShrink: 0 }} />
-          <span style={{
-            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-            opacity: 1,
-            transform: "translateX(0)",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            flexShrink: 0,
-          }}>Search chats</span>
-        </button>
-        
+          marginBottom: "4px"
+        }}>
+          {user?.username}
+        </div>
+        <div style={{
+          fontSize: "12px",
+          color: "#9ca3af"
+        }}>
+          {user?.email}
+        </div>
+      </div>
 
+      {/* Assigned Personas */}
+      <div style={{
+        marginBottom: "20px"
+      }}>
+        <div style={{
+          fontSize: "12px",
+          fontWeight: "500",
+          color: "#9ca3af",
+          marginBottom: "8px",
+          textTransform: "uppercase",
+          letterSpacing: "0.5px"
+        }}>
+          Your AI Personas
+        </div>
+        <div style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "4px"
+        }}>
+          {personas.map((persona) => (
+            <button
+              key={persona.id}
+              onClick={() => startNewChat(persona.id)}
+              style={{
+                backgroundColor: "transparent",
+                border: "none",
+                color: "white",
+                cursor: "pointer",
+                padding: "8px 10px",
+                borderRadius: "6px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "13px",
+                transition: "all 0.2s ease",
+                textAlign: "left",
+                width: "100%",
+                overflow: "hidden",
+                minHeight: "32px",
+              }}
+              onMouseEnter={(e) => e.target.style.backgroundColor = "#40414f"}
+              onMouseLeave={(e) => e.target.style.backgroundColor = "transparent"}
+            >
+              <PsychologyIcon style={{ fontSize: "16px", flexShrink: 0 }} />
+              <span style={{
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                flex: 1
+              }}>
+                {persona.name}
+              </span>
+            </button>
+          ))}
+          {personas.length === 0 && (
+            <div style={{
+              color: "#6b7280",
+              fontSize: "12px",
+              padding: "8px 10px",
+              fontStyle: "italic"
+            }}>
+              No personas assigned
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Conversations List */}
@@ -408,6 +436,7 @@ function Sidebar({ isCollapsed, onToggle }) {
         overflowY: "auto",
         overflowX: "hidden",
         paddingRight: "5px",
+        minHeight: 0, // Ensures flex item can shrink below content size
       }}>
         {conversations.map((c, index) => (
           <div
@@ -547,6 +576,48 @@ function Sidebar({ isCollapsed, onToggle }) {
           </button>
         </div>
       )}
+
+      {/* Logout Button */}
+      <div style={{
+        marginTop: "auto",
+        paddingTop: "20px",
+        paddingBottom: "20px",
+        borderTop: "1px solid #40414f",
+        flexShrink: 0,
+      }}>
+        <button
+          onClick={logout}
+          style={{
+            backgroundColor: "transparent",
+            border: "none",
+            color: "#ef4444",
+            cursor: "pointer",
+            padding: "8px 10px",
+            borderRadius: "8px",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            fontSize: "14px",
+            transition: "all 0.2s ease",
+            textAlign: "left",
+            width: "100%",
+            overflow: "hidden",
+            minHeight: "36px",
+          }}
+          onMouseEnter={(e) => e.target.style.backgroundColor = "#40414f"}
+          onMouseLeave={(e) => e.target.style.backgroundColor = "transparent"}
+        >
+          <LogoutIcon style={{ fontSize: "18px", flexShrink: 0 }} />
+          <span style={{
+            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+            opacity: 1,
+            transform: "translateX(0)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            flexShrink: 0,
+          }}>Logout</span>
+        </button>
+      </div>
     </div>
   );
 }
