@@ -29,16 +29,16 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    
-    if (error.response?.status === 401 && !originalRequest._retry) {
+
+    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url.includes('/auth/refresh')) {
       originalRequest._retry = true;
-      
+
       try {
         // Try to refresh the token
         const response = await api.post('/auth/refresh');
         const newToken = response.data.access_token;
         localStorage.setItem('userToken', newToken);
-        
+
         // Retry the original request with new token
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return api(originalRequest);
@@ -49,7 +49,7 @@ api.interceptors.response.use(
         return Promise.reject(refreshError);
       }
     }
-    
+
     return Promise.reject(error);
   }
 );
@@ -60,17 +60,17 @@ export const authAPI = {
     const response = await api.post('/auth/login', { username, password });
     return response.data;
   },
-  
+
   getGoogleAuthUrl: async () => {
     const response = await api.get('/auth/google/login');
     return response.data;
   },
-  
+
   getMe: async () => {
     const response = await api.get('/auth/me');
     return response.data;
   },
-  
+
   refreshToken: async () => {
     const response = await api.post('/auth/refresh');
     return response.data;
@@ -83,32 +83,32 @@ export const userAPI = {
     const response = await api.get('/user/personas');
     return response.data;
   },
-  
+
   getConversations: async () => {
     const response = await api.get('/user/conversations');
     return response.data;
   },
-  
+
   createConversation: async (personaId) => {
     const response = await api.post('/user/conversations', { persona_id: personaId });
     return response.data;
   },
-  
+
   getConversation: async (conversationId) => {
     const response = await api.get(`/user/conversations/${conversationId}`);
     return response.data;
   },
-  
+
   sendMessage: async (conversationId, message) => {
     const response = await api.post(`/user/conversations/${conversationId}/messages`, {
       content: message
     });
     return response.data;
   },
-  
+
   sendMessageStream: async (conversationId, messageData, onChunk, onComplete, onError) => {
     const token = localStorage.getItem('userToken');
-    
+
     try {
       const response = await fetch(`http://localhost:8000/user/conversations/${conversationId}/messages/stream`, {
         method: 'POST',
@@ -129,20 +129,20 @@ export const userAPI = {
 
       while (true) {
         const { done, value } = await reader.read();
-        
+
         if (done) break;
-        
+
         buffer += decoder.decode(value, { stream: true });
-        
+
         // Process complete lines
         const lines = buffer.split('\n');
         buffer = lines.pop(); // Keep incomplete line in buffer
-        
+
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6));
-              
+
               switch (data.type) {
                 case 'user_message':
                   // User message sent
@@ -167,7 +167,7 @@ export const userAPI = {
       onError(error.message);
     }
   },
-  
+
   getMessages: async (conversationId) => {
     const response = await api.get(`/user/conversations/${conversationId}/messages`);
     return response.data;
@@ -183,11 +183,11 @@ export const userAPI = {
       },
       body: formData,
     });
-    
+
     if (!response.ok) {
       throw new Error(`Upload failed: ${response.status}`);
     }
-    
+
     return response.json();
   },
 
@@ -198,11 +198,11 @@ export const userAPI = {
         'Authorization': `Bearer ${token}`,
       },
     });
-    
+
     if (!response.ok) {
       throw new Error(`Download failed: ${response.status}`);
     }
-    
+
     return response.json();
   },
 
