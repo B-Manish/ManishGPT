@@ -30,20 +30,18 @@ services:
     ports:
       - "8000:8000"
 
-  # user-ui:
-  #   build: ./user-ui
-  #   container_name: manishgpt_user_ui
-  #   environment:
-  #     # If your frontend reads this, use it as API base
-  #     REACT_APP_API_BASE: http://localhost:8000
-  #     REACT_APP_PROXY_TARGET: http://backend:8000
-  #   ports:
-  #     - "3001:3000"
-  #   volumes:
-  #     - ./user-ui:/app
-  #     - /app/node_modules
-  #   stdin_open: true
-  #   tty: true
+  user-ui:
+    build: ./user-ui
+    container_name: manishgpt_user_ui
+    environment:
+      # If your frontend reads this, use it as API base
+      REACT_APP_API_BASE: http://localhost:8000
+      REACT_APP_PROXY_TARGET: http://backend:8000
+    ports:
+      - "3001:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
 
   admin-ui:
     build: ./admin-ui
