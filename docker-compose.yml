@@ -45,19 +45,17 @@ services:
   #   stdin_open: true
   #   tty: true
 
-  # admin-ui:
-  #   build: ./admin-ui
-  #   container_name: manishgpt_admin_ui
-  #   environment:
-  #     REACT_APP_API_BASE: http://localhost:8000
-  #     REACT_APP_PROXY_TARGET: http://backend:8000
-  #   ports:
-  #     - "3000:3000"   # host:container
-  #   volumes:
-  #     - ./admin-ui:/app
-  #     - /app/node_modules
-  #   stdin_open: true
-  #   tty: true
+  admin-ui:
+    build: ./admin-ui
+    container_name: manishgpt_admin_ui
+    environment:
+      REACT_APP_API_BASE: http://localhost:8000
+      REACT_APP_PROXY_TARGET: http://backend:8000
+    ports:
+      - "3000:80"   # host:container (Nginx serves on 80)
+    depends_on:
+      - backend
+    restart: unless-stopped
 
   minio:
     image: minio/minio:latest
