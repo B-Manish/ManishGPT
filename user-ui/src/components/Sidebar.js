@@ -18,6 +18,7 @@ function Sidebar({ isCollapsed, onToggle }) {
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState("");
   const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0, conversationId: null });
+  const [activePersonaId, setActivePersonaId] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
@@ -37,6 +38,33 @@ function Sidebar({ isCollapsed, onToggle }) {
       window.removeEventListener('conversationCreated', handleConversationCreated);
     };
   }, []);
+
+  // Track active persona based on current route
+  useEffect(() => {
+    const updateActivePersona = async () => {
+      // Check if we're on a persona route
+      if (location.pathname.includes('/chat/persona/')) {
+        const personaId = location.pathname.split('/chat/persona/')[1];
+        setActivePersonaId(parseInt(personaId));
+      } 
+      // Check if we're on a conversation route
+      else if (location.pathname.startsWith('/chat/') && location.pathname !== '/chat') {
+        const conversationId = location.pathname.split('/chat/')[1];
+        if (conversationId) {
+          try {
+            const conversation = await userAPI.getConversation(conversationId);
+            setActivePersonaId(conversation.persona_id);
+          } catch (error) {
+            console.error('Error fetching conversation:', error);
+          }
+        }
+      } else {
+        setActivePersonaId(null);
+      }
+    };
+
+    updateActivePersona();
+  }, [location.pathname]);
 
   useEffect(() => {
     const handleClickOutside = () => {
@@ -343,41 +371,50 @@ function Sidebar({ isCollapsed, onToggle }) {
           AI Personas
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-          {personas.map((persona) => (
-            <button
-              key={persona.id}
-              onClick={() => startNewChat(persona.id)}
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "var(--text-secondary)",
-                cursor: "pointer",
-                padding: "10px 12px",
-                borderRadius: "8px",
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                fontSize: "14px",
-                fontWeight: "500",
-                transition: "var(--transition-fast)",
-                width: "100%",
-                textAlign: "left",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "var(--bg-tertiary)";
-                e.currentTarget.style.color = "var(--text-primary)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "transparent";
-                e.currentTarget.style.color = "var(--text-secondary)";
-              }}
-            >
-              <PsychologyIcon style={{ fontSize: "18px" }} />
-              <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {persona.name}
-              </span>
-            </button>
-          ))}
+          {personas.map((persona) => {
+            // Check if this persona is currently active
+            const isActive = activePersonaId === persona.id;
+
+            return (
+              <button
+                key={persona.id}
+                onClick={() => startNewChat(persona.id)}
+                style={{
+                  background: isActive ? "var(--bg-tertiary)" : "transparent",
+                  border: isActive ? "1px solid var(--border-subtle)" : "1px solid transparent",
+                  color: isActive ? "var(--text-primary)" : "var(--text-secondary)",
+                  cursor: "pointer",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  fontSize: "14px",
+                  fontWeight: isActive ? "600" : "500",
+                  transition: "var(--transition-fast)",
+                  width: "100%",
+                  textAlign: "left",
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = "var(--bg-tertiary)";
+                    e.currentTarget.style.color = "var(--text-primary)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = "transparent";
+                    e.currentTarget.style.color = "var(--text-secondary)";
+                  }
+                }}
+              >
+                <PsychologyIcon style={{ fontSize: "18px" }} />
+                <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {persona.name}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
